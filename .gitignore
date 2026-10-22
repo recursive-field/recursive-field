@@ -1,0 +1,29 @@
+# Secrets and credentials
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.p12
+*.pfx
+*.token
+keys/
+secrets/
+credentials/
+
+# Agent Zero private runtime state
+.a0proj/secrets.env
+.a0proj/variables.env
+.a0proj/memory/
+
+# Local runtime and editor state
+.DS_Store
+*.swp
+*.swo
+*~
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+node_modules/
