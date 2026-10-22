@@ -49,3 +49,14 @@ Before presenting work as complete:
 ## Child DOX Index
 
 No child ownership boundaries exist yet. Add them only when real repository regions acquire distinct responsibilities or workflows.
+
+## Public DOX Map
+
+`DOX/` is the current public documentation boundary; it does not introduce child ownership or a child `AGENTS.md` contract.
+
+| Document | Scope |
+| --- | --- |
+| [DOX/architecture/formation-target.md](DOX/architecture/formation-target.md) | Chapter 1 target boundary and source-to-target translation. |
+| [DOX/architecture/current-surfaces.md](DOX/architecture/current-surfaces.md) | Source-verified and live-observed current surfaces. |
+| [DOX/decisions/chapter-1-boundaries.md](DOX/decisions/chapter-1-boundaries.md) | Adopted Chapter 1 boundary decisions and reopening conditions. |
+| [DOX/status/chapter-1.md](DOX/status/chapter-1.md) | Chapter 1 closure, deferred open matters, and Chapter 2 inputs and non-goals. |
