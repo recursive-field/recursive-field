@@ -60,3 +60,8 @@ No child ownership boundaries exist yet. Add them only when real repository regi
 | [DOX/architecture/current-surfaces.md](DOX/architecture/current-surfaces.md) | Source-verified and live-observed current surfaces. |
 | [DOX/decisions/chapter-1-boundaries.md](DOX/decisions/chapter-1-boundaries.md) | Adopted Chapter 1 boundary decisions and reopening conditions. |
 | [DOX/status/chapter-1.md](DOX/status/chapter-1.md) | Chapter 1 closure, deferred open matters, and Chapter 2 inputs and non-goals. |
+| [DOX/architecture/formation-observation-frame.md](DOX/architecture/formation-observation-frame.md) | Thin, non-authoritative Chapter 2 observation grammar across the seven formation planes. |
+| [DOX/status/chapter-2-first-observation.md](DOX/status/chapter-2-first-observation.md) | Sanitized first-fidelity documentary trace and locally closed evidence. |
+| [DOX/status/chapter-2-continuity-state-observation.md](DOX/status/chapter-2-continuity-state-observation.md) | Source-grounded continuity-state inventory, protection asymmetries, survival implications, and narrowed reverse-resolution gap. |
+| [DOX/architecture/formation-utility-map.md](DOX/architecture/formation-utility-map.md) | Thirteen-capability utility recovery, modern dispositions, parity questions, retirements, and understanding dependencies. |
+| [DOX/status/chapter-2.md](DOX/status/chapter-2.md) | Chapter 2 progress, remaining study path, stopping condition, and non-goals. |
