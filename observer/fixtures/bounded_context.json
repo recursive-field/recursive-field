@@ -1,0 +1,236 @@
+{
+  "schema": "recursive-field/effective-formation-input/v0.2",
+  "observation": {
+    "context_ref": "fixture:context:one",
+    "project_ref": "fixture:project:one",
+    "profile_ref": "fixture:profile:observer",
+    "source_revision": "b1cbd1f960a1a5c4482b324dcff4742aa67b7a51",
+    "observed_at": "2026-10-23T23:30:00-04:00",
+    "vantage": "sanitized_fixture"
+  },
+  "resources": [
+    {
+      "kind": "profile",
+      "name": "agent.profile",
+      "source_ref": "fixture:profile:observer",
+      "precedence_tier": "fixture",
+      "enabled": true,
+      "condition": "satisfied",
+      "evidence": "sanitized_fixture"
+    },
+    {
+      "kind": "prompt",
+      "name": "system.main",
+      "source_ref": "project:profile:system-main",
+      "precedence_tier": "project_profile",
+      "enabled": true,
+      "condition": "satisfied",
+      "evidence": "sanitized_fixture"
+    },
+    {
+      "kind": "prompt",
+      "name": "system.main",
+      "source_ref": "bundled:profile:system-main",
+      "precedence_tier": "bundled_profile",
+      "enabled": true,
+      "condition": "satisfied",
+      "evidence": "source_verified"
+    },
+    {
+      "kind": "skill",
+      "name": "bounded.inquiry",
+      "source_ref": "fixture:skill:bounded-inquiry",
+      "precedence_tier": "fixture",
+      "enabled": true,
+      "condition": "satisfied",
+      "evidence": "sanitized_fixture"
+    },
+    {
+      "kind": "plugin",
+      "name": "tool.access",
+      "source_ref": "bundled:plugin:tool-access",
+      "precedence_tier": "bundled",
+      "enabled": true,
+      "condition": "unsatisfied",
+      "evidence": "source_verified"
+    },
+    {
+      "kind": "extension",
+      "name": "tool.policy.enforcement",
+      "source_ref": "bundled:extension:tool-policy",
+      "precedence_tier": "bundled",
+      "enabled": true,
+      "condition": "unsatisfied",
+      "evidence": "source_verified"
+    },
+    {
+      "kind": "capability",
+      "name": "observer.capability",
+      "source_ref": "fixture:policy:observer",
+      "precedence_tier": "fixture",
+      "enabled": true,
+      "condition": "satisfied",
+      "evidence": "sanitized_fixture"
+    },
+    {
+      "kind": "local_tool",
+      "name": "tool.access",
+      "source_ref": "fixture:tool:observation",
+      "precedence_tier": "fixture",
+      "enabled": false,
+      "condition": "unresolved",
+      "evidence": "sanitized_fixture"
+    },
+    {
+      "kind": "settings",
+      "name": "agent.settings",
+      "source_ref": "fixture:settings:agent",
+      "precedence_tier": "fixture",
+      "enabled": true,
+      "condition": "satisfied",
+      "evidence": "sanitized_fixture"
+    },
+    {
+      "kind": "secret_reference",
+      "name": "provider.api.credentials",
+      "source_ref": "fixture:secret-reference:provider",
+      "precedence_tier": "fixture",
+      "enabled": true,
+      "condition": "unsatisfied",
+      "evidence": "inaccessible"
+    },
+    {
+      "kind": "memory_projection",
+      "name": "memory.retrieval",
+      "source_ref": "fixture:memory:retrieval",
+      "precedence_tier": "fixture",
+      "enabled": true,
+      "condition": "satisfied",
+      "evidence": "sanitized_fixture"
+    },
+    {
+      "kind": "knowledge_source",
+      "name": "knowledge.corpus",
+      "source_ref": "fixture:knowledge:corpus",
+      "precedence_tier": "fixture",
+      "enabled": true,
+      "condition": "satisfied",
+      "evidence": "sanitized_fixture"
+    },
+    {
+      "kind": "instruction",
+      "name": "project.instructions",
+      "source_ref": "fixture:project:instructions",
+      "precedence_tier": "fixture",
+      "enabled": true,
+      "condition": "satisfied",
+      "evidence": "sanitized_fixture"
+    },
+    {
+      "kind": "obligation",
+      "name": "background.obligation",
+      "source_ref": "fixture:obligation:background",
+      "precedence_tier": "fixture",
+      "enabled": true,
+      "condition": "satisfied",
+      "evidence": "sanitized_fixture"
+    },
+    {
+      "kind": "external_dependency",
+      "name": "external.service",
+      "source_ref": "fixture:external:service",
+      "precedence_tier": "fixture",
+      "enabled": true,
+      "condition": "unsatisfied",
+      "evidence": "unknown"
+    },
+    {
+      "kind": "state",
+      "name": "workspace.state",
+      "source_ref": "fixture:state:workspace",
+      "precedence_tier": "fixture",
+      "enabled": true,
+      "condition": "satisfied",
+      "evidence": "sanitized_fixture"
+    }
+  ],
+  "projections": [
+    {
+      "kind": "prompt",
+      "name": "system.main",
+      "surface": "model_context",
+      "status": "projected",
+      "source_ref": "project:profile:system-main",
+      "evidence": "sanitized_fixture"
+    },
+    {
+      "kind": "skill",
+      "name": "bounded.inquiry",
+      "surface": "loaded_history",
+      "status": "projected",
+      "source_ref": "fixture:skill:bounded-inquiry",
+      "evidence": "sanitized_fixture"
+    },
+    {
+      "kind": "settings",
+      "name": "agent.settings",
+      "surface": "runtime_state",
+      "status": "projected",
+      "source_ref": "fixture:settings:agent",
+      "evidence": "sanitized_fixture"
+    },
+    {
+      "kind": "memory_projection",
+      "name": "memory.retrieval",
+      "surface": "retrieval_context",
+      "status": "not_projected",
+      "source_ref": "fixture:memory:retrieval",
+      "evidence": "sanitized_fixture"
+    },
+    {
+      "kind": "external_dependency",
+      "name": "external.service",
+      "surface": "none",
+      "status": "not_projected",
+      "source_ref": "fixture:external:service",
+      "evidence": "unknown"
+    }
+  ],
+  "policies": [
+    {
+      "capability": "local:mutation-probe",
+      "decision": "block",
+      "mode": "custom",
+      "enforcement": "pre_execution",
+      "source_ref": "fixture:policy:observer",
+      "evidence": "sanitized_fixture"
+    },
+    {
+      "capability": "local:observation-probe",
+      "decision": "allow",
+      "mode": "custom",
+      "enforcement": "pre_execution",
+      "source_ref": "fixture:policy:observer",
+      "evidence": "sanitized_fixture"
+    },
+    {
+      "capability": "local:response",
+      "decision": "allow",
+      "mode": "invariant",
+      "enforcement": "none",
+      "source_ref": "framework:required",
+      "evidence": "source_verified"
+    }
+  ],
+  "unknowns": [
+    {
+      "code": "downstream.consequence"
+    },
+    {
+      "code": "extension.cache.generation"
+    },
+    {
+      "code": "tool.argument.scope"
+    }
+  ]
+}
