@@ -22,7 +22,7 @@ Observable parity means evidence of equivalent utility, not reproduction of hist
 
 - **Intention:** Permit a runtime manifestation to be replaced without losing private formation continuity or participant-scoped durable state.
 - **Operative relation:** Authoritative source and durable inputs -> replaceable runtime manifestation -> observable service and generated projections.
-- **Current modern disposition:** **Adapt.** Source, writable runtime, and user-owned persistent state are distinguishable. The continuity-state observation narrows required continuity to a relational closure spanning authoritative inputs, participant records, required capabilities, secret custody, and recovery material; restoration and cross-manifestation continuity remain **Open**.
+- **Current modern disposition:** **Adapt.** Source, writable runtime, and user-owned persistent state are distinguishable. The continuity-state and context-dependency observations narrow required continuity to a relational closure spanning authoritative inputs, participant records, effective configuration, required capabilities, continuing obligations, provider relations, secret custody, and recovery material; restoration and cross-manifestation continuity remain **Open**.
 - **Dependencies:** State-region/capability boundary; versioned source/projection provenance; participant continuity linkage; graduated operational authority.
 - **Observable parity condition:** A fresh manifestation can be related to the same declared continuity, reconstruct intended projections, and show that runtime-local loss does not erase authoritative state.
 - **Discriminating question:** Which members of the relational closure are actually required by one bounded context, and what replacement evidence distinguishes semantic continuity from surviving bytes?
@@ -76,7 +76,7 @@ Observable parity means evidence of equivalent utility, not reproduction of hist
 
 - **Intention:** Select operating policy and mode for a bounded context while distinguishing preference, selection, authorization, and enforcement.
 - **Operative relation:** Situated scope + declared policy inputs + authority -> effective runtime mode and constraints.
-- **Current modern disposition:** **Open.** Profiles, settings, extensions, and tool lifecycle surfaces are **Verified Current**, but their formation-level policy relation and enforcement authority are unresolved.
+- **Current modern disposition:** **Open — narrowed.** Profiles, settings, extensions, and tool lifecycle surfaces are **Verified Current** selectors. A scoped tool-policy guard is a **Verified Current** enforcement seam for local and MCP tool execution, but argument scope, target authority, extension influence, downstream enforcement, and formation-level policy authority remain unresolved.
 - **Dependencies:** Scoped composition; capability boundary; context assembly; graduated operational authority.
 - **Observable parity condition:** The selected mode, policy sources, enforcing boundaries, and fallback behavior are inspectable for one execution context.
 - **Discriminating question:** Which current selectors alter composition only, and which can reliably prohibit or constrain action?

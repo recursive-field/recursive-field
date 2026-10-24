@@ -14,7 +14,7 @@ The first task is not to simulate completeness. It is to establish enough contin
 
 **Chapter 1 — Complete (2026-10-22).** The public formation boundary and modern source-to-target translation are documented, including verified runtime identity and basic host storage and publication surfaces. Recovery exercise, external gateway and TLS policy, effective-composition export, and behavioral knowledge and memory tests remain explicitly deferred to Chapter 2. No Recursive Field runtime, identity, or executable schema has been implemented.
 
-**Chapter 2 — In progress (2026-10-23).** A non-authoritative observation frame, first-fidelity trace, and neutral map of thirteen harness capabilities now support a source-grounded continuity-state observation. The state inventory is locally closed: current continuity depends on a differentiated relational closure rather than one runtime, project directory, or volume. Runtime-to-continuity resolution, effective composition, behavioral memory, recovery, ingress, trust, inheritance, authority, readiness, and provenance remain open. These documents do not select implementation or establish target capability.
+**Chapter 2 — Complete as documentary study and construction ordering (2026-10-23).** A source-grounded dependency closure now follows one persisted context through project, memory, knowledge, settings, profiles, skills, capabilities, scheduler obligations, and provider/background state. Every remaining uncertainty has a named evidence class and blocking scope. The resulting six-slice pathway begins with a read-only, content-free, non-authoritative effective-formation observer. No target capability has yet been implemented.
 
 Development will proceed through small, intelligible, and verifiable changes. Implemented capability will be distinguished from intention and hypothesis. Infrastructure, software, identities, and operating structures may evolve as the Field learns what forms its work actually requires.
 
@@ -27,11 +27,14 @@ Development will proceed through small, intelligible, and verifiable changes. Im
 - [Chapter 1 boundaries](DOX/decisions/chapter-1-boundaries.md)
 - [Chapter 1 status](DOX/status/chapter-1.md)
 
-### Chapter 2 — In progress
+### Chapter 2 — Complete
 
 - [Formation observation frame](DOX/architecture/formation-observation-frame.md)
 - [First Chapter 2 observation](DOX/status/chapter-2-first-observation.md)
 - [Continuity-state observation](DOX/status/chapter-2-continuity-state-observation.md)
+- [Chapter 2 inquiry calibration](DOX/status/chapter-2-inquiry-calibration.md)
+- [Context dependency observation](DOX/status/chapter-2-context-dependency-observation.md)
+- [Chapter 2 understanding disposition](DOX/status/chapter-2-understanding-disposition.md)
 - [Formation utility map](DOX/architecture/formation-utility-map.md)
 - [Native seed ground](DOX/architecture/native-seed-ground.md)
 - [Native seed unbound guard](DOX/architecture/native-seed-unbound-guard.md)

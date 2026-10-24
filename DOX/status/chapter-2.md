@@ -2,77 +2,95 @@
 
 ## State
 
-**In progress** as of 2026-10-23.
+**Complete — documentary study and construction ordering** as of 2026-10-23.
 
-Chapter 1 remains **Complete**. Chapter 2 is studying the utility, relations, dependencies, and acceptance evidence needed before implementation order can be trusted. Its sought result is a dependency-ordered, acceptance-bearing build pathway, not endless documentation and not implementation by implication.
+Chapter 1 remains **Complete**. Chapter 2 has studied the utility, relations, dependencies, evidence classes, and acceptance boundaries needed before implementation order can be trusted. Its result is a dependency-ordered, acceptance-bearing construction pathway. It does not claim that any target capability is implemented.
 
 ## Evidence Basis
 
-The first public pass used only the committed Chapter 1 evidence basis and decisions. The continuity-state pass added read-only inspection of the pinned Agent Zero source while inheriting, rather than repeating, Chapter 1's sanitized live observations. No private contents, live runtime, host, provider, gateway, credential, restore, relocation, replacement, or behavioral inspection was performed. Current-system statements remain **Verified Current** only within their cited source revision and observation boundaries.
+Chapter 2 used the committed Chapter 1 evidence basis, sanitized live observations inherited from Chapter 1, the distilled intelligence assimilation, and read-only inspection of Agent Zero source pinned at revision `b1cbd1f960a1a5c4482b324dcff4742aa67b7a51`. No private contents, live host, provider account, gateway, credential, external service, restore, relocation, replacement, or behavioral memory inspection was performed. Current-system statements remain **Verified Current** only within their cited revision and observation boundaries.
 
 ## Completed Inputs
 
 | Input | Classification | Contribution | Boundary |
 | --- | --- | --- | --- |
-| [Formation Observation Frame](../architecture/formation-observation-frame.md) | **Decision** | A thin, public-safe grammar for bounded evidence across exactly seven planes. | Non-authoritative; it does not define identity, schema, desired state, routing, or implementation. |
-| [Chapter 2 First Observation](chapter-2-first-observation.md) | **Verified Current** within its stated Chapter 1 evidence scope | A first-fidelity forward trace from public source lineage through the private project adapter and runtime manifestation to generated model context. | Documentary evidence only; reverse resolution and effective composition remain unresolved. |
-| [Formation Utility Map](../architecture/formation-utility-map.md) | **Target Requirement** map with explicit **Open** and **Not Implemented** gaps | Thirteen neutral harness capabilities, modern dispositions, dependencies, parity conditions, discriminating questions, a retirement set, and an understanding graph. | Utility recovery only; it does not select architecture or build order. |
-| [Continuity-State Observation](chapter-2-continuity-state-observation.md) | **Verified Current** source behavior with explicit **Open** recovery claims | A differentiated inventory of authoritative, durable, shared, generated, secret-bearing, incidental, and recovery state; forward and reverse relations; protection asymmetries; and replacement/loss implications. | Closes the inventory locally, not runtime-to-continuity resolution, restore behavior, or formation identity. |
+| [Formation Observation Frame](../architecture/formation-observation-frame.md) | **Decision** | Public-safe grammar for bounded evidence across seven planes. | Non-authoritative; it does not define identity, schema, desired state, routing, or implementation. |
+| [Chapter 2 First Observation](chapter-2-first-observation.md) | **Verified Current** within its stated scope | First forward trace from public source lineage through private project adapter and runtime manifestation to generated model context. | Generated context is not a complete explanation of its composition. |
+| [Formation Utility Map](../architecture/formation-utility-map.md) | **Target Requirement** map | Thirteen neutral capabilities, dispositions, dependencies, parity conditions, and retirement set. | Utility recovery only; it does not select architecture. |
+| [Continuity-State Observation](chapter-2-continuity-state-observation.md) | **Verified Current** source behavior with explicit open recovery claims | State-role inventory, protection asymmetries, forward/reverse relations, and replacement/loss implications. | Closes classification, not restore or semantic continuity. |
+| [Chapter 2 Inquiry Calibration](chapter-2-inquiry-calibration.md) | **Decision** plus retrospective inference | Checkpointed micro-passes, bounded widening, interruption-resilient returns, and completed meta-pass. | Does not establish a universal recursion or token optimum. |
+| [Context Dependency Observation](chapter-2-context-dependency-observation.md) | **Verified Current** source passes A–E2 plus **Synthesis** pass F | Closure from persisted context through project, memory, knowledge, configuration, profiles, skills, capabilities, obligations, and provider/background state. | Instance winners, behavioral semantics, external systems, and recovery remain open. |
+| [Chapter 2 Understanding Disposition](chapter-2-understanding-disposition.md) | **Decision** | Dispositions every understanding item, bounds the open evidence program, and orders six construction slices. | Study closure only; no capability is implemented. |
 
-## Understanding Still Required
+## Understanding Disposition
 
-| Required understanding | Status | Evidence needed before build order is trusted |
+| Required understanding | Chapter 2 result | What remains open |
 | --- | --- | --- |
-| Continuity-bearing state inventory | **Locally closed** | The continuity-state observation classifies present state roles, owners, mutation and replacement behavior, protection surfaces, and constraint shadow. Reopen when behavioral or recovery evidence changes the dependency closure. |
-| Runtime-to-continuity resolution | **Open — narrowed** | Current source resolves chat context to project scope and derived roots, but not a relocation-stable, public-safe continuity relation independent of mutable names and private coordinates. |
-| Effective-composition observation | **Not Implemented** | A bounded inspection of winning inputs, precedence, capabilities, policy, provenance, and unknowns that does not become authority or a manifest. |
-| Selection versus enforcement | **Open** | Evidence distinguishing mechanisms that choose or assemble inputs from boundaries that authorize, prohibit, constrain, or validate action. |
-| Memory behavior | **Open** | Bounded behavioral evidence for freshness, corpus coverage, retrieval quality, isolation, mutation effects, and rebuild semantics without exposing private content. |
-| Recovery semantics | **Open** | Defined recovery subject, source and state inputs, custody, integrity expectations, loss tolerance, reconstitution effects, and acceptance evidence before any exercise is proposed. |
-| External boundary intent | **Open** | A public-safe account of intended ingress, authorization, termination, routing, firewall, tunnel, service ownership, and denial behavior beyond observed publication. |
-| Capability trust | **Open** | Criteria for provenance, compatibility, authorization, lifecycle behavior, failure isolation, and revocation; discovery alone is insufficient. |
-| Inheritance | **Open** | Rules for how scope, policy, capability, knowledge, memory, and authority may inherit, shadow, merge, or stop across contexts. |
-| Actuation tiers | **Open** | Explicit boundaries among observation, proposal, bounded mutation, verification, wider operation, recovery, and delegation, including advancement and rollback evidence. |
-| Readiness and parity evidence | **Not Implemented** | Acceptance conditions that separate liveness from readiness, utility parity, continuity integrity, policy conformance, and recovery proof. |
-| Public/private provenance bridge | **Open** | A relation that links public lineage to private formation continuity without co-location, disclosure, or authority laundering. |
+| Continuity-bearing state inventory | **Locally closed** | Reopens on behavioral or recovery contradiction. |
+| Runtime-to-continuity resolution | **Open — bounded negative finding** | Continuity design decision and relocation/replacement evidence. |
+| Effective-composition observation | **Not Implemented — first construction target specified** | Implementation and comparison against a sanitized or authorized context. |
+| Selection versus enforcement | **Locally closed structurally** | Formation-wide authority, argument scope, downstream enforcement, and consequences. |
+| Memory behavior | **Open — source boundary closed** | Sanitized behavioral evidence. |
+| Recovery semantics | **Open — required contract bounded** | Design approval and recovery/replacement exercise. |
+| External boundary intent | **Open — isolated from first slice** | Explicit intent and authorized live evidence. |
+| Capability trust | **Target criteria locally closed; evidence open** | Provenance, compatibility, lifecycle, revocation, and consequence evidence. |
+| Inheritance | **Locally closed as modes and constraints** | Desired inheritance rules and behavioral validation. |
+| Actuation tiers | **Decision deferred; zero-actuation boundary explicit** | Advancement, enforcement, rollback, and recovery authority. |
+| Readiness and parity evidence | **Acceptance model bounded; implementation open** | Implemented checks and exercises. |
+| Public/private provenance bridge | **Target relation bounded; implementation open** | Observer implementation, continuity decision, and private-side comparison. |
 
-## Study Direction
+Open items are no longer generic research prompts. Each has a named evidence class and a known blocking scope. None blocks a read-only, content-free, non-authoritative observer; each continues to block the stronger claims recorded in the disposition.
 
-The next study pass should follow information dependencies rather than document count:
+## Dependency-Ordered Construction Pathway
 
-1. use the completed continuity-state inventory to follow one sanitized context backward through its project, memory, knowledge, settings, capabilities, scheduler references, and recoverable state;
-2. locate exactly where that dependency closure falls back to mutable coordinates, global stores, or unexported effective composition;
-3. observe effective composition and separate selection from enforcement;
-4. characterize memory, capability trust, external boundary, and recovery semantics;
-5. derive actuation tiers and readiness/parity evidence; and
-6. order build candidates only after each dependency has an acceptance condition and a preserved recovery route.
+1. **Public-safe effective-formation observer** — explain one bounded context's selected dependencies, candidates, evidence, and unknowns without exposing contents or becoming authority.
+2. **Sanitized behavioral evidence fixtures** — test memory, precedence, policy, scheduler, and provider/local fallback claims against controlled behavior.
+3. **Continuity and provenance relation decision** — define evidence of continuing participation across changed coordinates without minting identity.
+4. **Recovery contract and replacement exercise** — test reconstitution, losses, continuity, and independent recovery on a disposable substrate.
+5. **Graduated authority and validated lifecycle** — define and enforce consequence-sensitive advancement, rollback, verification, and delegation.
+6. **Readiness, parity, and authorized ingress** — distinguish liveness from readiness and expose only explicitly owned and authorized service routes.
 
-The order above is an inquiry sequence, not implementation order or architecture approval. Findings may cause earlier questions to reopen.
+This sequence follows dependency and acceptance evidence. It is not a commitment to a specific schema, plugin, service, provider, or deployment topology.
 
-## Stopping Condition for Study
+## First Construction Slice
 
-Chapter 2 study may stop when all of the following are true:
+The first safe slice is the **public-safe effective-formation observer** specified in the Understanding Disposition and Context Dependency Observation.
 
-- every item in the understanding table has either bounded supporting evidence or an explicit **Open** finding that no longer blocks ordering the first safe build slice;
-- the thirteen capabilities have stable intentions, operative relations, dispositions, dependencies, and observable parity conditions;
-- the public/private provenance bridge, continuity relation, authority boundaries, and recovery semantics are clear enough to prevent the first build from silently minting identity or authority;
-- effective composition can be observed sufficiently to distinguish selected inputs from enforced policy;
-- each proposed build slice has acceptance evidence, rollback or recovery conditions, and named unresolved dependencies;
-- Chapter 1 reopening conditions have been checked; and
-- further documentary analysis offers little decision-relevant novelty, with remaining progress requiring an explicitly authorized observation, behavioral test, design decision, or implementation.
+It must be:
 
-Meeting this stopping condition yields a dependency-ordered, acceptance-bearing build pathway. It does not prove that any target capability has been implemented.
+- read-only, content-free, disposable, time-bounded, source-revisioned, and non-authoritative;
+- explicit about winners, candidates, shadowing, conditional branches, evidence classes, and unknowns;
+- able to distinguish selection, projection, enforcement, authority, and consequence evidence;
+- unable to mint identity, desired state, permission, trust, continuity, recovery, or readiness;
+- safe against secret, participant-content, private-topology, and sensitive-coordinate disclosure; and
+- accepted only after independent fixture comparison and post-success scrutiny.
 
-## Non-Goals
+## Chapter 1 Reopening Check
 
-- Do not mint formation identity, runtime identity, a canonical root, or authority through documentation.
-- Do not define a manifest, executable schema, configuration grammar, desired state, hard routing, code, marker, or deployment.
-- Do not inspect or mutate live infrastructure, private formation continuity, credentials, private coordinates, or participant contents as part of this public pass.
-- Do not treat the observation frame, first trace, utility map, or future inspection output as operative authority.
-- Do not equate project selection with formation identity, generated model context with durable continuity, discovery with trust, selection with enforcement, reachability with authorization, health with readiness, or storage presence with recovery.
-- Do not reproduce historical mechanisms when only their underlying utility is relevant.
-- Do not close Chapter 2 merely because more documentation exists; close study only when the remaining build path is dependency-ordered and acceptance-bearing.
+No Chapter 1 reopening condition fired. The seven-plane boundary remains useful; public lineage and private continuity remain distinct; mutable coordinates remain non-identity; independent human recovery authority remains necessary; and no architecture, canonical root, schema, identity, or actuation authority was created.
+
+## Stopping Condition Result
+
+Chapter 2 study stops locally because:
+
+- every understanding item has bounded evidence or an explicit open disposition that does not block the first slice;
+- the thirteen capabilities retain stable intentions, relations, dependencies, parity conditions, and exclusions;
+- continuity, provenance, authority, recovery, and public/private boundaries are sufficiently constrained to prevent the first build from silently minting identity or authority;
+- effective-composition dependencies are understood sufficiently to specify a bounded observation surface and its acceptance contract, while current implementation remains accurately marked absent;
+- each construction slice has prerequisites, acceptance evidence, and named unresolved dependencies;
+- Chapter 1 reopening conditions were checked; and
+- further documentary inspection offers little decision-relevant novelty without implementation, an authorized behavioral observation, a design decision, live external evidence, or a recovery exercise.
+
+## Non-Goals Preserved
+
+- Do not mint formation identity, runtime identity, a canonical root, or authority through documentation or observation.
+- Do not treat the observer as a manifest, executable schema, configuration authority, desired state, or hard-routing source.
+- Do not inspect or mutate live infrastructure, private continuity, credentials, participant contents, or external boundaries without explicit authorization.
+- Do not equate selection with enforcement, discovery with trust, persistence with continuity, hashes with meaning, reachability with authorization, liveness with readiness, or surviving bytes with recovery.
+- Do not begin consequential actuation before its tier, authority, rollback, recovery, and verification conditions are decided and implemented.
 
 ## Current Boundary
 
-**Not Implemented:** Chapter 2 has not created a Recursive Field runtime, identity, schema, effective-composition inspector, validated lifecycle, recovery mechanism, ingress policy, capability-trust system, operational authority tier, or self-formation capability.
+**Not Implemented:** Chapter 2 has not created a Recursive Field runtime, effective-formation observer, continuity identity, lifecycle, recovery mechanism, ingress policy, capability-trust system, operational authority tier, readiness system, or self-formation capability.
+
+The next authorized construction work begins with Slice 1 in the next construction chapter. Reopen Chapter 2 study if Slice 1 cannot remain content-free, read-only, non-authoritative, and removable; if implementation reveals a missing dependency class; or if new evidence changes the construction order.
