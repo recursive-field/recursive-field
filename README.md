@@ -33,4 +33,8 @@ Development will proceed through small, intelligible, and verifiable changes. Im
 - [First Chapter 2 observation](DOX/status/chapter-2-first-observation.md)
 - [Continuity-state observation](DOX/status/chapter-2-continuity-state-observation.md)
 - [Formation utility map](DOX/architecture/formation-utility-map.md)
+- [Native seed ground](DOX/architecture/native-seed-ground.md)
+- [Native seed unbound guard](DOX/architecture/native-seed-unbound-guard.md)
+- [Native seed composition — Zero](DOX/architecture/native-seed-composition.md)
+- [Native seed acceptance record](DOX/status/native-seed-acceptance.md)
 - [Chapter 2 status](DOX/status/chapter-2.md)

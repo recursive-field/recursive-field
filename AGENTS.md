@@ -64,4 +64,8 @@ No child ownership boundaries exist yet. Add them only when real repository regi
 | [DOX/status/chapter-2-first-observation.md](DOX/status/chapter-2-first-observation.md) | Sanitized first-fidelity documentary trace and locally closed evidence. |
 | [DOX/status/chapter-2-continuity-state-observation.md](DOX/status/chapter-2-continuity-state-observation.md) | Source-grounded continuity-state inventory, protection asymmetries, survival implications, and narrowed reverse-resolution gap. |
 | [DOX/architecture/formation-utility-map.md](DOX/architecture/formation-utility-map.md) | Thirteen-capability utility recovery, modern dispositions, parity questions, retirements, and understanding dependencies. |
+| [DOX/architecture/native-seed-ground.md](DOX/architecture/native-seed-ground.md) | Pre-identity formation distinctions and evidence discipline for the first native seed. |
+| [DOX/architecture/native-seed-unbound-guard.md](DOX/architecture/native-seed-unbound-guard.md) | Fail-closed posture while identity, continuity, authority, composition, or recovery remain unresolved. |
+| [DOX/architecture/native-seed-composition.md](DOX/architecture/native-seed-composition.md) | Inert Zero composition, provenance, exclusions, activation prerequisites, and growth boundary. |
+| [DOX/status/native-seed-acceptance.md](DOX/status/native-seed-acceptance.md) | Static source checks and deferred behavioral acceptance gates for Zero. |
 | [DOX/status/chapter-2.md](DOX/status/chapter-2.md) | Chapter 2 progress, remaining study path, stopping condition, and non-goals. |
