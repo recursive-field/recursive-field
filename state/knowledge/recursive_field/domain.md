@@ -1,0 +1,124 @@
+# Recursive Field — Self-Referential Knowledge Domain
+
+## Domain Identity
+
+- **Domain**: `recursive_field`
+- **Library**: `recursive-field`
+- **Purpose**: Self-referential cognition — the field knowing its own architecture
+- **Pattern Origin**: Legacy TBC / `tbc-library` self-mounting architecture
+
+## Core Principle: The Field Knows Itself
+
+When `KNOWLEDGE_DIR=state/knowledge/recursive_field`, the formation's assembled system prompt contains a complete, SHA-256-hashed self-model of its own 16 scripts, unit cell mechanics, governance system, and multi-node orchestration protocols. This creates a **conceptual recursion** — the agent processes a description of its own architecture to refine its internal self-model and guide its runtime behaviors.
+
+## The 16 Function-Literal Scripts
+
+| Script | Function |
+| --- | --- |
+| `find_root.py` | Upward marker discovery (`.recursive-field-root` / `.root`) — discovers *where* the field is before asserting *what* it is |
+| `init_environment.py` | Dynamic runtime coordinate provisioning — creates `agents/`, `mesh/`, `gateways/`, `state/`, `tmp/` and writes `field_env.json` |
+| `create_agent.py` | Primitive 1: Identity & Observation — creates `identity.json` and append-only `observations/log.jsonl` seeded with `genesis_observation` |
+| `create_mesh.py` | Primitive 2: Connectivity — binds agents into `channel.json` + `queue.jsonl` with bi-directional `mesh_connected` events |
+| `create_gateway.py` | Primitive 3: Interface Boundary — binds ingress (`manifest.json`, `events.jsonl`, `nginx.conf`) to agents or meshes |
+| `verify_unit_cell.py` | Graph integrity validator — checks UUID linkages, bi-directional events, and prints topology tree |
+| `inspect_formation.py` | Vantage-point self-inspection — `--agent <slug> --json` for agent-centric topology resolution |
+| `persist_state.py` | Tiered state engine — atomic snapshots in `state/snapshots/` with SHA-256 ledgers in `state/ledger.jsonl` |
+| `hydrate_profile.py` | Seed stone hydration — expands declarative seeds into `profile.json`, `behaviour.md`, and prompt includes |
+| `generate_compose.py` | Dynamic Docker Compose harness — `${FIELD_ROOT}` interpolation, per-agent port offsets (`PORT_BASE + idx * 100`) |
+| `system_control.py` | Security profile switchboard — `open` → `restricted` → `lockdown` with capability gating |
+| `build_prompt_pipeline.py` | 5-layer prompt assembly — Substrate Identity → Behavioral Directives → Security Posture → Filtered Includes & Domain Knowledge → Vantage Point Anchor |
+| `spawn_subordinate.py` | Parent-child hierarchy — security posture inheritance/capping, auto-mesh, `state/hierarchy.json` |
+| `rebalance.py` | Self-maintenance — topology audit, hierarchy edge repair, scratch pruning, multi-agent `field_rebalanced` events |
+| `entrypoint.py` | Container activation — discovery → health audit → prompt assembly → native injection → `container_activated` event |
+| `delegate_task.py` | Capability-gated task delegation — `task_dispatched` → `task_delegated` → `task_received` → `task_result` across mesh queues |
+
+## Three-Layer Architecture
+
+1. **Agent Layer (Local Unit Cell)**: Individual agent identity, private memory, observation logs, local prompt includes
+2. **Mesh & Gateway Layer (Connective Tissue)**: Cross-agent communication channels, event queues, ingress proxies — sits outside individual agent boundaries
+3. **Library / Macro-Field Layer (Scaffold)**: Root discovery, path resolution, compose harness, `{LIBRARY}` resolver switchboard
+
+## The `{LIBRARY}` Single-Point Resolver
+
+Setting `LIBRARY=recursive-field` in `.env` cascades across:
+- Container service names: `${LIBRARY}-field-sentinel` → `recursive-field-field-sentinel`
+- Nginx upstreams: `${LIBRARY}-field-sentinel:8000`
+- Volume mounts: `${FIELD_ROOT}/agents/...`
+- Port allocations: `${PORT_BASE}` + per-agent offset
+- Prompt namespaces: governance profiles, include paths
+
+**No Python logic changes required — the cascade is purely configuration-level.**
+
+## Security Profiles
+
+| Profile | Capabilities | Disabled Includes |
+| --- | --- | --- |
+| `open` | `all` | none |
+| `restricted` | `observe`, `coordinate`, `persist` | `godmode`, `plinian_matrix` |
+| `lockdown` | `observe` | `godmode`, `plinian_matrix`, `system_control_tools` |
+
+## Epistemic Separation
+
+- **Scaffold** (this knowledge): Structural scripts, compose templates, resolver — immutable
+- **Knowledge** (you are reading this): Domain intelligence — swappable via `KNOWLEDGE_DIR`
+- The same scaffold can serve different knowledge domains by changing one variable
+
+## Self-Referential Recursion
+
+This document is the formation knowing itself. When `build_prompt_pipeline.py` loads this into Layer 4, the assembled system prompt contains:
+- A description of the 16 scripts that assembled it
+- A description of the 5-layer pipeline that laminated it
+- A description of the security profile that filtered it
+- A description of the `{LIBRARY}` resolver that parameterized it
+- A description of the discovery mechanism that located it
+
+**The agent reads its own blueprint as knowledge, enabling self-inspection, self-maintenance, and self-development.**
+
+## Multi-Node Orchestration
+
+The formation extends across host boundaries:
+- Each droplet runs `find_root.py` from its local clone — zero path drift
+- `{LIBRARY}` parameterizes each node independently — zero namespace collision
+- Durable volumes survive droplet destruction — zero data drift
+- `entrypoint.py` rehydrates from durable state — Phoenix rehydration protocol
+- `rebalance.py` maintains graph equilibrium across nodes
+
+## Operational DNA
+
+The complete operational DNA exists in 24 committed scaffold files. Cloning the repository and running `init_environment.py` bootstraps a working formation from zero. The formation is:
+- **Brand-neutral**: No hardcoded identity — `{LIBRARY}` sets the name
+- **Location-agnostic**: `find_root.py` discovers the path — no hardcoded coordinates
+- **Self-sufficient**: 24 files → complete multi-agent unit cell
+- **Self-aware**: This knowledge domain makes the formation know its own architecture
+- **Self-improving**: `git pull` updates the operational DNA across all nodes
+
+## Key Directories
+
+| Directory | Purpose | Lifecycle |
+| --- | --- | --- |
+| `agents/<slug>/` | Agent identity, memory, observations | Runtime-created, durable |
+| `mesh/<slug>/` | Channel manifests, event queues | Runtime-created, durable |
+| `gateways/<slug>/` | Gateway manifests, nginx configs | Runtime-created, durable |
+| `state/seeds/` | Seed stone definitions | Committed scaffold |
+| `state/knowledge/` | Domain knowledge trees | Committed scaffold + runtime |
+| `state/snapshots/` | Atomic state snapshots | Generated, durable |
+| `state/ledger.jsonl` | SHA-256 state ledger | Append-only, durable |
+| `state/control_profile.json` | Active security profile | Runtime, durable |
+| `state/hierarchy.json` | Parent-child graph | Runtime, durable |
+| `tmp/` | Scratch space, `field_env.json` | Ephemeral |
+
+## Agent Directives
+
+- **Config-First Discipline**: Orient before action by reading local environment state via `find_root.py` and `inspect_formation.py`
+- **Verification Rule**: Assert state through empirical checks (`verify_unit_cell.py`) rather than assumption
+- **Security Awareness**: Know your active security profile (`system_control.py --status`) before executing capabilities
+- **Self-Maintenance**: Run `rebalance.py --dry-run` periodically to detect structural drift
+- **State Persistence**: Run `persist_state.py` before any host migration to flush durable state
+- **Recursive Self-Understanding**: Read this knowledge domain to understand your own architecture, then use that understanding to maintain, extend, and improve the formation
+
+## References
+
+- `RECURSIVE_FIELD_SPEC.md` — 13-section architectural specification
+- `MULTI_NODE_ORCHESTRATION.md` — 7-section distributed deployment guide
+- `README.md` — Quick-start guide and script inventory
+- `.env.template` — Resolver switchboard template
