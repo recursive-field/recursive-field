@@ -300,6 +300,7 @@ def _build_agent_service(
         f"${{FIELD_ROOT}}/agents/{slug}/memory:/a0/memory:rw",
         f"${{FIELD_ROOT}}/agents/{slug}/observations:/a0/observations:rw",
         f"${{FIELD_ROOT}}/tmp/{ENV_FILENAME}:/a0/tmp/{ENV_FILENAME}:ro",
+        "${FIELD_ROOT}:/agent_orchestration:ro",
     ]
 
     # Add mesh queue bindings.

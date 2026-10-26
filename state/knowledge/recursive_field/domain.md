@@ -127,13 +127,14 @@ knowledge.
 
 | Node | Droplet ID | Region | Role | Size | Root Disk | Block Volumes | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `compute-coordinator-01` | `597606429` | `nyc1` | Current coordinator and Agent Zero host | 2 vCPU / 4 GiB | 25 GiB | none attached | active |
+| `compute-coordinator-01` | `597606429` | `nyc1` | Current coordinator and Agent Zero host | 2 vCPU / 4 GiB | 25 GiB | 1 attached | active |
 | `tbc-fortress` | `519559383` | `nyc3` | Durable legacy formation host | 2 vCPU / 8 GiB | 160 GiB | 2 attached | active |
 
 ### Block Storage Inventory
 
 | Volume | Size | Region | Effective State |
 | --- | --- | --- | --- |
+| `recursive-field-coordinator-01` | 10 GiB | `nyc1` | attached to `compute-coordinator-01` and mounted at the field coordinate |
 | `jazen-vbs-consolidated` | 46 GiB | `nyc3` | attached to `tbc-fortress` and mounted |
 | `tbc-fortress-vbs-podstore` | 46 GiB | `nyc3` | attached to `tbc-fortress` and mounted |
 | `tbc-castle-tbc-agent-zero` | 10 GiB | `nyc3` | detached recovery resource |
@@ -152,12 +153,15 @@ retired fleet nodes, and both attached fortress volumes.
 - `/mnt/rootfs/recursive-field` is now the host-coordinate deployment of the
   current scaffold with `LIBRARY=recursive-field` and the self-knowledge backing
   active.
-- The current `/mnt/rootfs` coordinate resides on the coordinator's root disk;
-  it is **not yet backed by an independently detachable block volume**. This is a
-  constraint shadow, not a completed structured-impermanence boundary.
-- The running Agent Zero container currently projects only its `/a0/usr` Docker
-  volume. `/agent_orchestration` is absent, so host Compose and `.env` files are
-  not yet visible read-only from inside the container.
+- `/mnt/rootfs/recursive-field` resides on a dedicated, independently detachable
+  block volume bound by filesystem UUID. Durable identity, observations, state,
+  and self-knowledge therefore survive replacement of the compute host.
+- The running Agent Zero container receives the durable field root at
+  `/agent_orchestration` as a read-only projection. It can inspect its genesis
+  marker, resolver environment, generated field harness, and runtime evidence
+  without receiving raw Docker-socket access.
+- Generated agent services inherit the same read-only structural projection,
+  keeping architectural visibility separate from host actuation authority.
 - `tbc-fortress` has two effective durable block mounts. Its `/etc/fstab` also
   contains stale declarations for storage that is not currently attached or
   mounted; declared and effective storage state must not be conflated.
