@@ -90,8 +90,11 @@ The complete operational DNA is committed as a scaffold of 17 function-literal
 Python scripts plus declarative templates and documentation. Cloning the
 repository and running `init_environment.py` bootstraps a working formation from
 zero. Optional brand-neutral `systemd/` templates bind a bounded queue worker to
-an exact active field-root mount and make that mount a Docker startup
-prerequisite, without increasing the script count. The formation is:
+an exact active field-root mount, schedule it on persistent five-second calendar
+boundaries with missed downtime coalesced into one catch-up activation, and make
+that mount a Docker startup prerequisite. The oneshot service and nonblocking
+lock prevent overlapping execution without increasing the script count. The
+formation is:
 - **Brand-neutral**: No hardcoded identity — `{LIBRARY}` sets the name
 - **Location-agnostic**: `find_root.py` discovers the path — no hardcoded coordinates
 - **Self-sufficient**: Committed scaffold → complete multi-agent unit cell

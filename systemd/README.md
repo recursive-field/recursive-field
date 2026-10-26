@@ -1,10 +1,11 @@
 # systemd queue worker templates
 
-These source templates render one bounded queue worker and one approximately
-five-second timer for a single agent/mesh pair. A brand-neutral
-`docker.service` drop-in also makes the exact field-root mount a prerequisite
-for Docker startup, protecting auto-restarted bind-mounted containers from a
-fallback root-disk directory. These units are not additional Python scripts.
+These source templates render one bounded queue worker and one persistent,
+approximately five-second calendar timer for a single agent/mesh pair. A
+brand-neutral `docker.service` drop-in also makes the exact field-root mount a
+prerequisite for Docker startup, protecting auto-restarted bind-mounted
+containers from a fallback root-disk directory. These units are not additional
+Python scripts.
 
 ## Deployment substitutions
 
@@ -110,9 +111,13 @@ systemctl enable --now "${UNIT_STEM}.timer"
 systemctl status "${UNIT_STEM}.timer" --no-pager
 ```
 
-The timer fires about five seconds after boot and about every five seconds after
-activation. The oneshot worker processes at most one task. `flock` serializes
-runs without waiting; lock contention (75) and security lockdown (4) are normal
+The timer follows wall-clock boundaries at seconds `00/5`. `Persistent=true`
+causes one immediate, coalesced catch-up activation after downtime if at least
+one boundary was missed; it does not replay every missed interval. The next
+regular boundary can follow that catch-up by less than five seconds. The
+oneshot worker processes at most one task, systemd does not reactivate it while
+it remains active, and `flock` prevents overlapping execution from any other
+activation source. Lock contention (75) and security lockdown (4) are normal
 successful unit outcomes. Output and errors go to journald under the rendered
 service unit identifier. Inspect with:
 

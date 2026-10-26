@@ -140,10 +140,10 @@ Task payloads are never interpreted as shell commands.
 ### Optional systemd scheduling
 
 [`systemd/`](systemd/) contains brand-neutral source templates for a hardened
-root-run oneshot worker, an approximately five-second timer, and a
-`docker.service` drop-in that requires the exact field-root mount before Docker
-starts auto-restarted bind-mounted containers. A missing mount cannot silently
-fall back to the root-disk directory. See
+root-run oneshot worker, a persistent approximately five-second calendar timer,
+and a `docker.service` drop-in that requires the exact field-root mount before
+Docker starts auto-restarted bind-mounted containers. A missing mount cannot
+silently fall back to the root-disk directory. See
 [`systemd/README.md`](systemd/README.md) for substitutions, validation,
 installation, recovery, and rollback. These unit templates do not change the
 17-script inventory.

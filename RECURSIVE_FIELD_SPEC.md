@@ -322,8 +322,11 @@ cannot degrade into writes to a fallback directory. The Docker drop-in makes
 the same mount a prerequisite for daemon startup, preventing auto-restarted
 bind-mounted containers from starting against that fallback. The worker invokes
 `consume_queue.py --once` under nonblocking `flock`; lock contention and
-lockdown are successful unit outcomes. The timer activates after about five
-seconds and then at about five-second intervals.
+lockdown are successful unit outcomes. The persistent calendar timer follows
+wall-clock boundaries at seconds `00/5`. After downtime it coalesces missed
+boundaries into one catch-up activation rather than replaying every interval;
+the next regular boundary may follow in less than five seconds. The oneshot
+service and lock prevent overlapping worker execution.
 
 For the first deployment the service explicitly uses `root`: durable runtime
 files are currently root-owned and ACL tooling is unavailable. This avoids an
@@ -523,7 +526,7 @@ The resolver uses `KEY = VALUE` pairs to promote knowledge bindings above the st
 │   ├── docker.service.d/
 │   │   └── field-root.conf.in  # Docker exact-mount prerequisite drop-in
 │   ├── queue-worker.service.in # Hardened bounded worker template
-│   ├── queue-worker.timer.in   # Approximately five-second timer template
+│   ├── queue-worker.timer.in   # Persistent five-second calendar timer template
 │   └── README.md               # Render, install, recovery, and rollback
 ├── .recursive-field-root       # Genesis marker
 ├── .env                        # Resolver switchboard

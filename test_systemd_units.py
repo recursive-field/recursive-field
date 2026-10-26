@@ -83,11 +83,14 @@ class SystemdTemplateTest(unittest.TestCase):
         self.assertIsNone(re.search(r"@[A-Z_]+@", timer))
         required_lines = {
             "Unit=queue-worker-observer-observation-mesh.service",
-            "OnBootSec=5s",
-            "OnUnitActiveSec=5s",
+            "OnCalendar=*-*-* *:*:00/5",
+            "AccuracySec=1s",
+            "RandomizedDelaySec=0",
             "Persistent=true",
         }
         self.assertTrue(required_lines.issubset(set(timer.splitlines())))
+        self.assertNotIn("OnBootSec=", timer)
+        self.assertNotIn("OnUnitActiveSec=", timer)
 
     def test_docker_drop_in_requires_exact_field_mount(self) -> None:
         drop_in = _render("docker.service.d/field-root.conf.in")
