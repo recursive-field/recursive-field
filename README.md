@@ -137,6 +137,17 @@ Async runtime artifacts live beneath the already-ignored formation trees:
 `coordinate` capability before claiming work; `lockdown` leaves the task pending.
 Task payloads are never interpreted as shell commands.
 
+### Optional systemd scheduling
+
+[`systemd/`](systemd/) contains brand-neutral source templates for a hardened
+root-run oneshot worker, an approximately five-second timer, and a
+`docker.service` drop-in that requires the exact field-root mount before Docker
+starts auto-restarted bind-mounted containers. A missing mount cannot silently
+fall back to the root-disk directory. See
+[`systemd/README.md`](systemd/README.md) for substitutions, validation,
+installation, recovery, and rollback. These unit templates do not change the
+17-script inventory.
+
 ---
 
 ## Security Profiles
@@ -166,6 +177,7 @@ For the complete, authoritative architectural reference, see:
 
 **Committed (The Scaffold):**
 - All 17 function-literal Python scripts
+- Brand-neutral `systemd/` service/timer templates and deployment instructions
 - `.recursive-field-root` genesis marker
 - `RECURSIVE_FIELD_SPEC.md` specification
 - `state/seeds/` seed stone templates

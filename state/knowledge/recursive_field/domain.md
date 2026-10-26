@@ -86,10 +86,15 @@ The formation extends across host boundaries:
 
 ## Operational DNA
 
-The complete operational DNA exists in 24 committed scaffold files. Cloning the repository and running `init_environment.py` bootstraps a working formation from zero. The formation is:
+The complete operational DNA is committed as a scaffold of 17 function-literal
+Python scripts plus declarative templates and documentation. Cloning the
+repository and running `init_environment.py` bootstraps a working formation from
+zero. Optional brand-neutral `systemd/` templates bind a bounded queue worker to
+an exact active field-root mount and make that mount a Docker startup
+prerequisite, without increasing the script count. The formation is:
 - **Brand-neutral**: No hardcoded identity — `{LIBRARY}` sets the name
 - **Location-agnostic**: `find_root.py` discovers the path — no hardcoded coordinates
-- **Self-sufficient**: 24 files → complete multi-agent unit cell
+- **Self-sufficient**: Committed scaffold → complete multi-agent unit cell
 - **Self-aware**: This knowledge domain makes the formation know its own architecture
 - **Self-improving**: `git pull` updates the operational DNA across all nodes
 

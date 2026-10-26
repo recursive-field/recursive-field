@@ -845,8 +845,18 @@ def main(argv: list[str] | None = None) -> int:
     if not args.once:
         parser.error("--once is required; unbounded worker loops are not implemented")
 
+    # Service managers normally start commands outside the field tree. Treat
+    # FIELD_ROOT as a CLI-only discovery coordinate; direct callers retain the
+    # explicit ``start`` argument contract on consume_queue().
+    discovery_start = os.environ.get("FIELD_ROOT") or None
+
     try:
-        result = consume_queue(args.agent_slug, args.mesh_slug, once=True)
+        result = consume_queue(
+            args.agent_slug,
+            args.mesh_slug,
+            once=True,
+            start=discovery_start,
+        )
     except RuntimeError as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1

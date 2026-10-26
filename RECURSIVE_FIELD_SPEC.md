@@ -307,6 +307,32 @@ dispatch pending without a claim.
 
 **Worker exit codes**: `0` completed/idle · `1` runtime failure · `2` missing agent/mesh · `3` validation rejection · `4` security halt · `5` adapter failure
 
+When invoked as a CLI, the worker uses a non-empty `FIELD_ROOT` environment
+value as its discovery start. Direct Python callers retain the explicit `start`
+argument contract.
+
+### 6.4 Optional systemd queue scheduling
+
+`systemd/queue-worker.service.in`, `systemd/queue-worker.timer.in`, and the
+`systemd/docker.service.d/field-root.conf.in` drop-in are brand-neutral
+rendered-unit sources, not additional scripts. One rendered worker pair binds an
+exact agent/mesh pair to an exact deployed field-root mount. The oneshot service
+uses `RequiresMountsFor=` plus a `mountpoint` `ExecCondition` so an absent mount
+cannot degrade into writes to a fallback directory. The Docker drop-in makes
+the same mount a prerequisite for daemon startup, preventing auto-restarted
+bind-mounted containers from starting against that fallback. The worker invokes
+`consume_queue.py --once` under nonblocking `flock`; lock contention and
+lockdown are successful unit outcomes. The timer activates after about five
+seconds and then at about five-second intervals.
+
+For the first deployment the service explicitly uses `root`: durable runtime
+files are currently root-owned and ACL tooling is unavailable. This avoids an
+implicit ownership/mode migration while constraining the worker with a private
+mount/network namespace, no capabilities or privilege gain, strict system/home
+protection, and writes limited to the exact field root and private runtime lock
+directory. Rendering, validation, installation, and rollback are specified in
+`systemd/README.md`.
+
 ---
 
 ## 7. Container Runtime Activation & Host-Mount Deployment
@@ -493,6 +519,12 @@ The resolver uses `KEY = VALUE` pairs to promote knowledge bindings above the st
 ├── entrypoint.py         # Container entrypoint (→ entrypoint.py)
 ├── delegate_task.py            # Task delegation primitive
 ├── consume_queue.py            # Bounded async queue worker
+├── systemd/                    # Optional rendered host scheduler (not scripts)
+│   ├── docker.service.d/
+│   │   └── field-root.conf.in  # Docker exact-mount prerequisite drop-in
+│   ├── queue-worker.service.in # Hardened bounded worker template
+│   ├── queue-worker.timer.in   # Approximately five-second timer template
+│   └── README.md               # Render, install, recovery, and rollback
 ├── .recursive-field-root       # Genesis marker
 ├── .env                        # Resolver switchboard
 └── docker-compose.yml          # Generated compose spec

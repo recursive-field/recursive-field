@@ -1,0 +1,14 @@
+[Unit]
+Description=Schedule bounded mesh queue worker (@AGENT_SLUG@/@MESH_SLUG@)
+Documentation=file://@FIELD_ROOT@/systemd/README.md
+
+[Timer]
+Unit=@SERVICE_UNIT@
+OnBootSec=5s
+OnUnitActiveSec=5s
+AccuracySec=1s
+RandomizedDelaySec=0
+Persistent=true
+
+[Install]
+WantedBy=timers.target

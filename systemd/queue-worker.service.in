@@ -1,0 +1,48 @@
+[Unit]
+Description=Bounded mesh queue worker (@AGENT_SLUG@/@MESH_SLUG@)
+Documentation=file://@FIELD_ROOT@/systemd/README.md
+RequiresMountsFor=@FIELD_ROOT@
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+Environment="FIELD_ROOT=@FIELD_ROOT@"
+RuntimeDirectory=@LOCK_RUNTIME_DIR@
+RuntimeDirectoryMode=0700
+ExecCondition=/usr/bin/mountpoint --quiet -- @FIELD_ROOT@
+ExecStart=/usr/bin/flock --nonblock --exclusive --conflict-exit-code=75 /run/@LOCK_RUNTIME_DIR@/@LOCK_FILE@ /usr/bin/python3 @FIELD_ROOT@/consume_queue.py @AGENT_SLUG@ @MESH_SLUG@ --once
+SuccessExitStatus=4 75
+TimeoutStartSec=4min
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=@SERVICE_UNIT@
+
+# The first deployment intentionally runs as root because the durable runtime
+# tree is root-owned and no ACL tooling is available. The mount namespace and
+# remaining controls constrain that authority to the exact rendered paths.
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+PrivateNetwork=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+ProcSubset=pid
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX
+IPAddressDeny=any
+LockPersonality=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+RestrictNamespaces=yes
+SystemCallArchitectures=native
+UMask=0077
+ReadWritePaths=@FIELD_ROOT@ /run/@LOCK_RUNTIME_DIR@
