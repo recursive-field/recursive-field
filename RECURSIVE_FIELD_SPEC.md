@@ -179,7 +179,7 @@ Separates fast working context from immutable state snapshots:
 | State Ledger | `state/ledger.jsonl` | Append-only entries with snapshot_id, SHA-256 hashes, event counts |
 
 **Invocation**: `python3 persist_state.py [--agent <slug>] [--flush]`  
-**Features**: `--agent` for scoped ingestion · `--flush` for scratch cleanup preserving `field_env.json`
+**Features**: `--agent` for scoped ingestion · `--flush` for scratch cleanup preserving `field_env.json` · hashes async task envelopes and results plus recursive agent worker state (claims and cursors)
 
 ### 4.2 Seed Stone & Profile Hydration (`hydrate_profile.py`)
 
@@ -273,20 +273,39 @@ Spawns subordinate agents with mandatory security posture inheritance:
 **Event**: `field_rebalanced` appended to all agent observation logs  
 **Invocation**: `python3 rebalance.py [--dry-run] [--prune-scratch] [--repair-hierarchy]`
 
-### 6.3 Runtime Task Delegation Loop (`delegate_task.py`)
+### 6.3 Runtime Task Delegation Loop (`delegate_task.py`, `consume_queue.py`)
 
-Capability-gated work dispatch across the mesh:
+Capability-gated work dispatch supports two explicit modes:
 
-```
-task_dispatched (mesh queue)
-  → task_delegated (sender log)
-  → task_received (recipient log)
-  → task_result (mesh queue + sender log)
-```
+- `acknowledge` (default): preserves the original immediate acknowledgement flow.
+- `async`: atomically persists `mesh/<mesh>/tasks/<task_id>.json`, records only
+  `task_dispatched`, `task_delegated`, and `task_received`, and leaves execution to
+  the recipient worker.
 
-**Security gate**: `lockdown` profile lacks `coordinate` capability → delegation blocked (exit 4)  
-**Invocation**: `python3 delegate_task.py <sender> <recipient> <mesh> "<payload>" [--payload-file <path>]`  
-**Exit codes**: `0` delegated · `1` root not found · `2` agent/mesh not found · `3` mesh doesn't connect · `4` security violation
+Async envelopes bind the payload and canonical envelope SHA-256 values to sender,
+recipient, mesh, genesis identity, the required `coordinate` capability, optional
+active prompt hash, timestamp, task type, and execution policy.
+
+`consume_queue.py <agent> <mesh> --once` scans from the durable
+`agents/<agent>/worker_state/<mesh>.cursor.json` cursor, validates the envelope and
+current identities, rechecks the current security profile, and creates an exclusive
+`agents/<agent>/worker_state/claims/<task_id>.json` claim. Only the
+`inspect_unit_cell` adapter under an `allowlisted` execution policy is supported;
+task payloads are never executed as shell input. Completion writes a hashed result
+artifact under `mesh/<mesh>/results/`, recipient-authored `task_started` plus
+`task_completed`/`task_failed` observations, a `task_result` queue event, an
+atomically advanced cursor, and a state snapshot. If recovery finds a valid result
+artifact before cursor advancement, it reconciles missing lifecycle state without
+rewriting or mutating that artifact. Lockdown or loss of `coordinate` leaves the
+dispatch pending without a claim.
+
+**Delegation invocation**: `python3 delegate_task.py <sender> <recipient> <mesh> "<payload>" [--payload-file <path>] [--mode acknowledge|async]`
+
+**Worker invocation**: `python3 consume_queue.py <recipient> <mesh> --once`
+
+**Delegation exit codes**: `0` delegated · `1` root not found · `2` agent/mesh not found · `3` mesh doesn't connect · `4` security violation
+
+**Worker exit codes**: `0` completed/idle · `1` runtime failure · `2` missing agent/mesh · `3` validation rejection · `4` security halt · `5` adapter failure
 
 ---
 
@@ -372,7 +391,7 @@ Every unit cell is itself a bounded field. Naming scripts for their **literal fu
 | `entrypoint.py` | `entrypoint.py` | Container boot, health preflight, prompt injection |
 | `rebalance.py` | `rebalance.py` | Graph topology audit, hierarchy repair, scratch pruning |
 
-All other scripts (`create_agent.py`, `create_mesh.py`, `create_gateway.py`, `verify_unit_cell.py`, `inspect_formation.py`, `persist_state.py`, `hydrate_profile.py`, `generate_compose.py`, `system_control.py`, `build_prompt_pipeline.py`, `spawn_subordinate.py`, `delegate_task.py`) are already function-literal — no changes required.
+All other scripts (`create_agent.py`, `create_mesh.py`, `create_gateway.py`, `verify_unit_cell.py`, `inspect_formation.py`, `persist_state.py`, `hydrate_profile.py`, `generate_compose.py`, `system_control.py`, `build_prompt_pipeline.py`, `spawn_subordinate.py`, `delegate_task.py`, `consume_queue.py`) are already function-literal — no changes required.
 
 ### 9.3 Marker File Compatibility
 
@@ -411,7 +430,7 @@ The resolver uses `KEY = VALUE` pairs to promote knowledge bindings above the st
 
 | Metric | Value |
 | --- | --- |
-| Total scripts | 14 (18 steps) |
+| Total scripts | 17 |
 | Active agents | 3 (`field-sentinel`, `field-scout`, `sentinel-sub-1`) |
 | Active meshes | 2 (`sentinel-scout-mesh`, `field-sentinel-sentinel-sub-1-mesh`) |
 | Active gateways | 2 (`sentinel-cli-gw`, `mesh-api-gw`) |
@@ -440,6 +459,7 @@ The resolver uses `KEY = VALUE` pairs to promote knowledge bindings above the st
 | 16 | `entrypoint.py` | 0 | Discovery → health → prompt → injection → activation event |
 | 17 | *(host mount)* | 0 | Full lifecycle at `/tmp/mnt_rootfs_test/recursive-field` — zero drift |
 | 18 | `delegate_task.py` | 0/4 | Delegation + queue events + bi-directional logs + lockdown gate (exit 4) |
+| 19 | `consume_queue.py` | 0/3/4/5 | Once-only execution + replay/tamper/lockdown handling + persisted result |
 
 ### 11.3 Portability Proof
 
@@ -472,6 +492,7 @@ The resolver uses `KEY = VALUE` pairs to promote knowledge bindings above the st
 ├── rebalance.py          # Self-maintenance (→ rebalance.py)
 ├── entrypoint.py         # Container entrypoint (→ entrypoint.py)
 ├── delegate_task.py            # Task delegation primitive
+├── consume_queue.py            # Bounded async queue worker
 ├── .recursive-field-root       # Genesis marker
 ├── .env                        # Resolver switchboard
 └── docker-compose.yml          # Generated compose spec
@@ -560,7 +581,8 @@ state/
 | `spawn_subordinate.py` | `python3 spawn_subordinate.py <parent> <child> [role] [--seed <name>]` | 0 spawned · 1 no root · 2 bad · 3 exists · 4 security | `find_root`, `create_agent`, `create_mesh`, `hydrate_profile` |
 | `rebalance.py` | `python3 rebalance.py [--dry-run] [--prune-scratch] [--repair-hierarchy]` | 0 OK · 1 no root · 2 critical fail | `find_root` |
 | `entrypoint.py` | `python3 entrypoint.py <slug> [--dry-run] [--skip-rebalance]` | 0 activated · 1 no root · 2 no agent · 3 health fail | `find_root`, `build_prompt_pipeline`, `rebalance`, `init_environment` |
-| `delegate_task.py` | `python3 delegate_task.py <sender> <recipient> <mesh> "<payload>" [--payload-file <path>]` | 0 delegated · 1 no root · 2 no agent/mesh · 3 no connection · 4 security | `find_root` |
+| `delegate_task.py` | `python3 delegate_task.py <sender> <recipient> <mesh> "<payload>" [--payload-file <path>] [--mode acknowledge|async]` | 0 delegated · 1 no root · 2 no agent/mesh · 3 no connection · 4 security | `find_root` |
+| `consume_queue.py` | `python3 consume_queue.py <recipient> <mesh> --once` | 0 done/idle · 1 runtime · 2 missing · 3 validation · 4 security halt · 5 adapter failure | `find_root`, `verify_unit_cell`, `persist_state` |
 
 ---
 

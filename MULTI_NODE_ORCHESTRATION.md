@@ -456,4 +456,4 @@ The `v1.0.0-scaffold` baseline, combined with this Multi-Node Orchestration Guid
 - **Zero security drift** across recovery (control profiles on persistent storage)
 - **Zero code drift** across scaling (same scaffold cloned everywhere, `{LIBRARY}` resolver parameterizes each node)
 
-**16 scripts · 13-section spec · N droplets · 1 scaffold · zero drift.** 🌱
+**17 scripts · 13-section spec · N droplets · 1 scaffold · zero drift.** 🌱

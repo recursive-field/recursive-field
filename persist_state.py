@@ -42,13 +42,50 @@ def _utc_now_iso() -> str:
 
 
 def _utc_now_compact() -> str:
-    return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S") + "Z"
+    # Microseconds prevent rapid worker completions from replacing a snapshot.
+    return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
 
 
 def _read_json(path: Path) -> dict:
     if not path.is_file():
         raise FileNotFoundError(f"Missing file: {path}")
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _fsync_directory(path: Path) -> None:
+    fd = os.open(path, os.O_RDONLY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def _atomic_write_json(path: Path, data: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
+    try:
+        fd = os.open(temp_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(data, handle, indent=2)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temp_path, path)
+        _fsync_directory(path.parent)
+    finally:
+        if temp_path.exists():
+            temp_path.unlink()
+
+
+def _append_jsonl(path: Path, data: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = (json.dumps(data, separators=(",", ":")) + "\n").encode("utf-8")
+    fd = os.open(path, os.O_APPEND | os.O_CREAT | os.O_WRONLY, 0o600)
+    try:
+        os.write(fd, payload)
+        os.fsync(fd)
+    finally:
+        os.close(fd)
 
 
 def _read_jsonl(path: Path) -> list[dict]:
@@ -86,6 +123,21 @@ def _short_uuid(uuid_str: str, length: int = 8) -> str:
     return uuid_str[:length] + "..." if len(uuid_str) > length else uuid_str
 
 
+def _collect_artifacts(base_dir: Path, owner_dir: Path) -> list[dict]:
+    """Collect hashes for generated durable artifacts below a runtime subtree."""
+    artifacts: list[dict] = []
+    if not base_dir.is_dir():
+        return artifacts
+    for path in sorted(base_dir.rglob("*")):
+        if path.is_file():
+            artifacts.append({
+                "relative_path": str(path.relative_to(owner_dir)),
+                "sha256": _sha256(path),
+                "size": path.stat().st_size,
+            })
+    return artifacts
+
+
 def _ingest_agent(agent_dir: Path) -> dict:
     """Ingest a single agent's artifacts."""
     identity_path = agent_dir / "identity.json"
@@ -121,6 +173,9 @@ def _ingest_agent(agent_dir: Path) -> dict:
             "observations/log.jsonl": _sha256(log_path),
         },
         "memory_files": memory_files,
+        "worker_state_files": _collect_artifacts(
+            agent_dir / "worker_state", agent_dir
+        ),
     }
 
 
@@ -148,6 +203,8 @@ def _ingest_mesh(mesh_dir: Path) -> dict:
             "channel.json": _sha256(channel_path),
             "queue.jsonl": _sha256(queue_path),
         },
+        "task_files": _collect_artifacts(mesh_dir / "tasks", mesh_dir),
+        "result_files": _collect_artifacts(mesh_dir / "results", mesh_dir),
     }
 
 
@@ -186,13 +243,18 @@ def _collect_all_hashes(
         for fname, h in agent.get("file_hashes", {}).items():
             key = f"agents/{agent['slug']}/{fname}"
             all_hashes[key] = h
-        for mem_file in agent.get("memory_files", []):
-            key = f"agents/{agent['slug']}/{mem_file['relative_path']}"
-            all_hashes[key] = mem_file["sha256"]
+        for artifact_group in ("memory_files", "worker_state_files"):
+            for artifact in agent.get(artifact_group, []):
+                key = f"agents/{agent['slug']}/{artifact['relative_path']}"
+                all_hashes[key] = artifact["sha256"]
     for mesh in meshes:
         for fname, h in mesh.get("file_hashes", {}).items():
             key = f"mesh/{mesh['slug']}/{fname}"
             all_hashes[key] = h
+        for artifact_group in ("task_files", "result_files"):
+            for artifact in mesh.get(artifact_group, []):
+                key = f"mesh/{mesh['slug']}/{artifact['relative_path']}"
+                all_hashes[key] = artifact["sha256"]
     for gw in gateways:
         for fname, h in gw.get("file_hashes", {}).items():
             key = f"gateways/{gw['slug']}/{fname}"
@@ -361,10 +423,7 @@ def persist_state(
 
     snapshot_filename = f"snap_{timestamp_compact}.json"
     snapshot_path = snapshots_dir / snapshot_filename
-    snapshot_path.write_text(
-        json.dumps(snapshot, indent=2) + "\n",
-        encoding="utf-8",
-    )
+    _atomic_write_json(snapshot_path, snapshot)
 
     # Compute snapshot file hash.
     snapshot_hash = _sha256(snapshot_path)
@@ -386,8 +445,7 @@ def persist_state(
         "agent_scoped": agent_slug,
     }
 
-    with ledger_path.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(ledger_entry) + "\n")
+    _append_jsonl(ledger_path, ledger_entry)
 
     # Flush scratch if requested.
     flushed_files: list[str] = []

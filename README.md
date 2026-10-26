@@ -91,7 +91,7 @@ KNOWLEDGE_DIR=state/knowledge/urban_ops     # Urban Operations intelligence
 
 ---
 
-## Script Inventory (16 Scripts)
+## Script Inventory (17 Scripts)
 
 | Script | Function |
 | --- | --- |
@@ -111,6 +111,31 @@ KNOWLEDGE_DIR=state/knowledge/urban_ops     # Urban Operations intelligence
 | `rebalance.py` | Automated topology audit, hierarchy repair, scratch pruning |
 | `entrypoint.py` | Container boot: discovery to health to prompt to injection to activation |
 | `delegate_task.py` | Capability-gated task delegation across mesh queues |
+| `consume_queue.py` | Bounded async worker with durable cursor, atomic claims, and allowlisted execution |
+
+### Bounded Asynchronous Delegation
+
+Legacy delegation remains the default and immediately records an acknowledgement result:
+
+```bash
+python3 delegate_task.py sender recipient mesh "payload"
+```
+
+Async mode persists a validated task envelope without creating an immediate result. The
+recipient then consumes at most one eligible dispatch with the only supported adapter,
+`inspect_unit_cell`:
+
+```bash
+python3 delegate_task.py sender recipient mesh "inspect the unit cell" --mode async
+python3 consume_queue.py recipient mesh --once
+```
+
+Async runtime artifacts live beneath the already-ignored formation trees:
+`mesh/<mesh>/{tasks,results}/`,
+`agents/<agent>/worker_state/claims/<task_id>.json`, and
+`agents/<agent>/worker_state/<mesh>.cursor.json`. The worker rechecks the current
+`coordinate` capability before claiming work; `lockdown` leaves the task pending.
+Task payloads are never interpreted as shell commands.
 
 ---
 
@@ -140,7 +165,7 @@ For the complete, authoritative architectural reference, see:
 ## Git vs. Generated Separation
 
 **Committed (The Scaffold):**
-- All 16 function-literal Python scripts
+- All 17 function-literal Python scripts
 - `.recursive-field-root` genesis marker
 - `RECURSIVE_FIELD_SPEC.md` specification
 - `state/seeds/` seed stone templates

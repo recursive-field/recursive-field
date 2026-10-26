@@ -9,9 +9,9 @@
 
 ## Core Principle: The Field Knows Itself
 
-When `KNOWLEDGE_DIR=state/knowledge/recursive_field`, the formation's assembled system prompt contains a complete, SHA-256-hashed self-model of its own 16 scripts, unit cell mechanics, governance system, and multi-node orchestration protocols. This creates a **conceptual recursion** — the agent processes a description of its own architecture to refine its internal self-model and guide its runtime behaviors.
+When `KNOWLEDGE_DIR=state/knowledge/recursive_field`, the formation's assembled system prompt contains a complete, SHA-256-hashed self-model of its own 17 scripts, unit cell mechanics, governance system, and multi-node orchestration protocols. This creates a **conceptual recursion** — the agent processes a description of its own architecture to refine its internal self-model and guide its runtime behaviors.
 
-## The 16 Function-Literal Scripts
+## The 17 Function-Literal Scripts
 
 | Script | Function |
 | --- | --- |
@@ -31,6 +31,7 @@ When `KNOWLEDGE_DIR=state/knowledge/recursive_field`, the formation's assembled 
 | `rebalance.py` | Self-maintenance — topology audit, hierarchy edge repair, scratch pruning, multi-agent `field_rebalanced` events |
 | `entrypoint.py` | Container activation — discovery → health audit → prompt assembly → native injection → `container_activated` event |
 | `delegate_task.py` | Capability-gated task delegation — `task_dispatched` → `task_delegated` → `task_received` → `task_result` across mesh queues |
+| `consume_queue.py` | Bounded asynchronous recipient execution — validates envelopes, claims one allowlisted task, authors results, advances a durable cursor, and persists state |
 
 ## Three-Layer Architecture
 
@@ -66,7 +67,7 @@ Setting `LIBRARY=recursive-field` in `.env` cascades across:
 ## Self-Referential Recursion
 
 This document is the formation knowing itself. When `build_prompt_pipeline.py` loads this into Layer 4, the assembled system prompt contains:
-- A description of the 16 scripts that assembled it
+- A description of the 17 scripts that assembled it
 - A description of the 5-layer pipeline that laminated it
 - A description of the security profile that filtered it
 - A description of the `{LIBRARY}` resolver that parameterized it
