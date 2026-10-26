@@ -116,9 +116,71 @@ The complete operational DNA exists in 24 committed scaffold files. Cloning the 
 - **State Persistence**: Run `persist_state.py` before any host migration to flush durable state
 - **Recursive Self-Understanding**: Read this knowledge domain to understand your own architecture, then use that understanding to maintain, extend, and improve the formation
 
+## Verified Substrate Topology (Audited 2026-10-25)
+
+This map records stable, non-secret infrastructure facts suitable for the public
+self-model. Exact addresses, filesystem UUIDs, and host-local mount evidence are
+kept in generated runtime snapshots and append-only ledgers rather than committed
+knowledge.
+
+### DigitalOcean Fleet
+
+| Node | Droplet ID | Region | Role | Size | Root Disk | Block Volumes | Status |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `compute-coordinator-01` | `597606429` | `nyc1` | Current coordinator and Agent Zero host | 2 vCPU / 4 GiB | 25 GiB | none attached | active |
+| `tbc-fortress` | `519559383` | `nyc3` | Durable legacy formation host | 2 vCPU / 8 GiB | 160 GiB | 2 attached | active |
+
+### Block Storage Inventory
+
+| Volume | Size | Region | Effective State |
+| --- | --- | --- | --- |
+| `jazen-vbs-consolidated` | 46 GiB | `nyc3` | attached to `tbc-fortress` and mounted |
+| `tbc-fortress-vbs-podstore` | 46 GiB | `nyc3` | attached to `tbc-fortress` and mounted |
+| `tbc-castle-tbc-agent-zero` | 10 GiB | `nyc3` | detached recovery resource |
+| `tbc-gateway-podstore` | 20 GiB | `nyc3` | detached recovery resource |
+| `tbc-gateway-srv` | 10 GiB | `nyc3` | detached recovery resource |
+
+The DigitalOcean API reports **23 droplet snapshots** and **2 volume snapshots**.
+These include recovery baselines for `tbc-fortress`, `compute-coordinator-01`,
+retired fleet nodes, and both attached fortress volumes.
+
+### Situated Findings
+
+- The live observer is container `agent-zero` on `compute-coordinator-01`.
+- Passwordless root SSH using the Recursive Field infrastructure key is verified
+  to both active droplets.
+- `/mnt/rootfs/recursive-field` is now the host-coordinate deployment of the
+  current scaffold with `LIBRARY=recursive-field` and the self-knowledge backing
+  active.
+- The current `/mnt/rootfs` coordinate resides on the coordinator's root disk;
+  it is **not yet backed by an independently detachable block volume**. This is a
+  constraint shadow, not a completed structured-impermanence boundary.
+- The running Agent Zero container currently projects only its `/a0/usr` Docker
+  volume. `/agent_orchestration` is absent, so host Compose and `.env` files are
+  not yet visible read-only from inside the container.
+- `tbc-fortress` has two effective durable block mounts. Its `/etc/fstab` also
+  contains stale declarations for storage that is not currently attached or
+  mounted; declared and effective storage state must not be conflated.
+
+### Self-Applied Unit Cell
+
+The host-coordinate deployment bootstraps its own operational structure:
+
+- `field-sentinel`: primary self-observer and integrity steward
+- `field-scout`: substrate discovery and topology observer
+- `self-observation-mesh`: peer channel joining the two agents
+- `sentinel-cli-gw`: CLI boundary targeting `field-sentinel`
+- Active security posture: `restricted`
+- Active Layer 4 knowledge: `state/knowledge/recursive_field`
+
+Exact runtime topology is regenerated locally with `inspect_formation.py`,
+`persist_state.py`, and `verify_unit_cell.py`; it is not treated as timeless
+committed truth.
+
 ## References
 
 - `RECURSIVE_FIELD_SPEC.md` — 13-section architectural specification
 - `MULTI_NODE_ORCHESTRATION.md` — 7-section distributed deployment guide
+- `DEPLOYMENT_MATRIX.md` — 8-section deployment configuration matrix
 - `README.md` — Quick-start guide and script inventory
 - `.env.template` — Resolver switchboard template

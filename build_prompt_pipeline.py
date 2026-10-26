@@ -39,6 +39,7 @@ CONTROL_PROFILE_PATH = Path("state") / "control_profile.json"
 ENV_FILENAME = "field_env.json"
 SLUG_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 CHARS_PER_TOKEN = 4
+GENERATED_PROMPT_FILENAMES = {"system_prompt.md"}
 
 
 def _utc_now_iso() -> str:
@@ -161,6 +162,8 @@ def _build_layer_4_includes(
         parts.append(f"- Included: {included_count} | Excluded: {excluded_count} | Security: {active}")
         return "\n".join(parts), sources
     for prompt_path in sorted(prompts_dir.glob("*.md")):
+        if prompt_path.name in GENERATED_PROMPT_FILENAMES:
+            continue
         include_name = prompt_path.stem
         if include_name in disabled_includes:
             excluded_count += 1

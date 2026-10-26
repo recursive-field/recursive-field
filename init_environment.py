@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """Environment initialization for the Recursive Field.
 
-Discovers the field root via ``find_field_root``, validates the genesis
+Discovers the field root via ``find_root``, validates the genesis
 marker, provisions the core primitive/state directories, and writes a
 localized runtime context file (``tmp/field_env.json``).
 
 Usage:
-    python init_field_environment.py [start_path]
+    python init_environment.py [start_path]
 
 Exit codes:
     0  environment initialized successfully
@@ -45,6 +45,28 @@ REQUIRED_DIRS = [
 def _utc_now_iso() -> str:
     """Return the current UTC time as an ISO-8601 string with timezone offset."""
     return datetime.now(timezone.utc).isoformat()
+
+
+def _read_env_file(path: Path) -> dict[str, str]:
+    """Read simple key/value assignments without executing shell syntax."""
+    if not path.exists():
+        return {}
+
+    values: dict[str, str] = {}
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip()
+        if value and value[:1] == value[-1:] and value.startswith(("'", '"')):
+            value = value[1:-1]
+        if key:
+            values[key] = value
+
+    return values
 
 
 def validate_marker(marker_path: Path) -> dict:
@@ -105,9 +127,14 @@ def init_environment(start: str | os.PathLike[str] | None = None) -> dict:
     for dir_name in REQUIRED_DIRS:
         (root / dir_name).mkdir(parents=True, exist_ok=True)
 
-    # Read LIBRARY and KNOWLEDGE_DIR from .env if present.
-    library = os.environ.get("LIBRARY", "recursive-field")
-    knowledge_dir = os.environ.get("KNOWLEDGE_DIR", "")
+    # Resolve identity and knowledge from process environment, then the
+    # discovered root's .env file, then stable defaults. FIELD_ROOT remains
+    # marker-derived so configuration cannot bypass root discovery.
+    env_file = _read_env_file(root / ".env")
+    library = os.environ.get("LIBRARY", env_file.get("LIBRARY", "recursive-field"))
+    knowledge_dir = os.environ.get(
+        "KNOWLEDGE_DIR", env_file.get("KNOWLEDGE_DIR", "")
+    )
 
     # Generate runtime context.
     context = {

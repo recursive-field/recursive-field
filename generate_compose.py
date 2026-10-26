@@ -19,7 +19,9 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import stat
 import sys
+import tempfile
 from pathlib import Path
 
 # Ensure the script's own directory is importable when invoked from
@@ -175,6 +177,17 @@ def _scan_gateways(gw_dir: Path) -> list[dict]:
 
 
 def _generate_env(root: Path, port_base: int, image_name: str, library: str = DEFAULT_LIBRARY, knowledge_dir: str = DEFAULT_KNOWLEDGE_DIR) -> str:
+    values = {
+        "LIBRARY": library,
+        "KNOWLEDGE_DIR": knowledge_dir,
+        "FIELD_ROOT": str(root),
+        "PORT_BASE": str(port_base),
+        "IMAGE_NAME": image_name,
+    }
+    for key, value in values.items():
+        if "\n" in value or "\r" in value:
+            raise ValueError(f"Invalid newline in .env value for {key}")
+
     return (
         f"# Recursive Field — auto-generated environment\n"
         f"# Do not commit secrets here.\n"
@@ -185,6 +198,55 @@ def _generate_env(root: Path, port_base: int, image_name: str, library: str = DE
         f"PORT_BASE={port_base}\n"
         f"IMAGE_NAME={image_name}\n"
     )
+
+
+def _update_env_assignments(path: Path, updates: dict[str, str]) -> None:
+    """Atomically update selected assignments while preserving the .env file."""
+    for key, value in updates.items():
+        if "\n" in value or "\r" in value:
+            raise ValueError(f"Invalid newline in .env value for {key}")
+
+    original = path.read_bytes().decode("utf-8")
+    newline = "\r\n" if "\r\n" in original else "\n"
+    lines = original.splitlines()
+    seen: set[str] = set()
+
+    for index, line in enumerate(lines):
+        stripped = line.lstrip()
+        if not stripped or stripped.startswith("#") or "=" not in line:
+            continue
+        key = line.split("=", 1)[0].strip()
+        if key in updates:
+            lines[index] = f"{key}={updates[key]}"
+            seen.add(key)
+
+    if lines and any(key not in seen for key in updates):
+        lines.append("")
+    for key, value in updates.items():
+        if key not in seen:
+            lines.append(f"{key}={value}")
+
+    updated = newline.join(lines) + newline
+    mode = stat.S_IMODE(path.stat().st_mode)
+    temp_name: str | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            newline="",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            delete=False,
+        ) as temp_file:
+            temp_name = temp_file.name
+            temp_file.write(updated)
+            temp_file.flush()
+            os.fsync(temp_file.fileno())
+        os.chmod(temp_name, mode)
+        os.replace(temp_name, path)
+    finally:
+        if temp_name and os.path.exists(temp_name):
+            os.unlink(temp_name)
 
 
 # ─── Nginx config for HTTP gateways ────────────────────────────────
@@ -419,14 +481,25 @@ def generate_compose(
     meshes = _scan_meshes(root / "mesh")
     gateways = _scan_gateways(root / "gateways")
 
-    # Read LIBRARY and KNOWLEDGE_DIR from environment or .env file.
-    library = os.environ.get("LIBRARY", DEFAULT_LIBRARY)
-    knowledge_dir = os.environ.get("KNOWLEDGE_DIR", DEFAULT_KNOWLEDGE_DIR)
-
-    # Generate .env.
-    env_content = _generate_env(root, port_base, image_name, library, knowledge_dir)
+    # Preserve an existing resolver switchboard. Compose generation owns only
+    # its requested port and image values; identity, knowledge, root, comments,
+    # and deployment-specific settings remain operator-controlled.
     env_file_path = root / ".env"
-    env_file_path.write_text(env_content, encoding="utf-8")
+    if env_file_path.is_file():
+        _update_env_assignments(
+            env_file_path,
+            {
+                "PORT_BASE": str(port_base),
+                "IMAGE_NAME": image_name,
+            },
+        )
+    else:
+        library = os.environ.get("LIBRARY", DEFAULT_LIBRARY)
+        knowledge_dir = os.environ.get("KNOWLEDGE_DIR", DEFAULT_KNOWLEDGE_DIR)
+        env_content = _generate_env(
+            root, port_base, image_name, library, knowledge_dir
+        )
+        env_file_path.write_text(env_content, encoding="utf-8")
 
     # Generate docker-compose.yml.
     spec = _build_compose_spec(root, agents, meshes, gateways, port_base)
