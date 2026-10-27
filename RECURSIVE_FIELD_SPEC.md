@@ -311,7 +311,51 @@ When invoked as a CLI, the worker uses a non-empty `FIELD_ROOT` environment
 value as its discovery start. Direct Python callers retain the explicit `start`
 argument contract.
 
-### 6.4 Optional systemd queue scheduling
+### 6.4 Formation-Owned Continuation Intent (`continuation_schema.py`, `resume_thread.py`)
+
+Intent continuity remains on the Formation side of the Engine/Formation
+boundary. Draft 2020-12 contracts in
+`schemas/continuation-intent.schema.json` and
+`schemas/continuation-checkpoint.schema.json` describe explicit opt-in artifacts
+under `state/continuations/{intents,checkpoints}/`. Context identifiers are
+opaque caller-supplied coordinates rather than inferred Engine grammar.
+
+`continuation_schema.py` supplies dependency-free schema enforcement, stable
+UTF-8 canonical JSON, embedded SHA-256 sealing/validation, timezone-aware lease
+validation, context-evidence binding, a complete non-actuating effect boundary,
+and same-directory atomic writes with file and directory `fsync`. Checkpoint
+ancestry links every prior checkpoint by canonical UUID and hash.
+
+`resume_thread.py <intent_uuid> --dry-run` is a strictly read-only eligibility
+classifier. It validates regular non-symlink paths confined to the field root,
+genesis identity, intent/checkpoint hashes and linkage, the complete checkpoint
+chain, current security profile and required capabilities, attested context
+evidence, lease currency, and state/effect consistency. Its classifications and
+exit codes are:
+
+| Classification | Exit | Meaning |
+| --- | ---: | --- |
+| `resumable` | 0 | Explicitly armed and unclaimed; classification only |
+| `active` | 10 | Active with a current held lease |
+| `awaiting_human` | 11 | Explicit human gate; never resumable |
+| `terminal` | 12 | Completed, cancelled, blocked, or failed |
+| `needs_reconciliation` | 20 | Valid artifacts with lease, state, or security drift |
+| `invalid` | 30 | Malformed, tampered, unsafe, or mislinked evidence |
+| `unavailable` | 40 | Required formation artifact or current context attestation absent |
+
+Output is one canonical JSON line with the resolved `checkpoint_id`,
+classification, eligibility, sorted reasons, blocking conditions, and explicit
+`would_claim`, `would_dispatch`, `would_write`, and `would_execute` fields. The
+four `would_*` fields are invariantly false because Step 2 exposes no actuating
+mode; only `resumable` is eligible, and its blocking list is empty. No generated
+timestamp is emitted. `--at <ISO-8601>` fixes lease evaluation for reproducible
+classification; otherwise current UTC is read but never persisted. The classifier neither scans
+Engine chats nor calls an Agent Zero endpoint, and it cannot claim an intent,
+advance a lease, mutate a chat, create lifecycle records, start a model turn,
+replay an effect, install a service, or deploy. These omissions are the Step 2
+effect boundary, not deferred side effects hidden behind dry-run.
+
+### 6.5 Optional systemd queue scheduling
 
 `systemd/queue-worker.service.in`, `systemd/queue-worker.timer.in`, and the
 `systemd/docker.service.d/field-root.conf.in` drop-in are brand-neutral
@@ -459,7 +503,7 @@ The resolver uses `KEY = VALUE` pairs to promote knowledge bindings above the st
 
 | Metric | Value |
 | --- | --- |
-| Total scripts | 17 |
+| Total scripts/modules | 19 |
 | Active agents | 3 (`field-sentinel`, `field-scout`, `sentinel-sub-1`) |
 | Active meshes | 2 (`sentinel-scout-mesh`, `field-sentinel-sentinel-sub-1-mesh`) |
 | Active gateways | 2 (`sentinel-cli-gw`, `mesh-api-gw`) |
@@ -522,6 +566,11 @@ The resolver uses `KEY = VALUE` pairs to promote knowledge bindings above the st
 ├── entrypoint.py         # Container entrypoint (→ entrypoint.py)
 ├── delegate_task.py            # Task delegation primitive
 ├── consume_queue.py            # Bounded async queue worker
+├── continuation_schema.py      # Continuation schema/hash/write contracts
+├── resume_thread.py            # Read-only continuation dry-run classifier
+├── schemas/
+│   ├── continuation-intent.schema.json
+│   └── continuation-checkpoint.schema.json
 ├── systemd/                    # Optional rendered host scheduler (not scripts)
 │   ├── docker.service.d/
 │   │   └── field-root.conf.in  # Docker exact-mount prerequisite drop-in
@@ -589,6 +638,9 @@ state/
 ├── control_profile.json       # Active security profile + prompt includes
 ├── hierarchy.json             # Parent-child node graph + edges
 ├── ledger.jsonl               # Append-only SHA-256 state ledger
+├── continuations/             # Ignored formation-owned runtime instances
+│   ├── intents/<intent_uuid>.json
+│   └── checkpoints/<checkpoint_uuid>.json
 ├── seeds/
 │   └── sentinel_observer.json  # Default seed stone definition
 └── snapshots/
@@ -618,6 +670,8 @@ state/
 | `entrypoint.py` | `python3 entrypoint.py <slug> [--dry-run] [--skip-rebalance]` | 0 activated · 1 no root · 2 no agent · 3 health fail | `find_root`, `build_prompt_pipeline`, `rebalance`, `init_environment` |
 | `delegate_task.py` | `python3 delegate_task.py <sender> <recipient> <mesh> "<payload>" [--payload-file <path>] [--mode acknowledge|async]` | 0 delegated · 1 no root · 2 no agent/mesh · 3 no connection · 4 security | `find_root` |
 | `consume_queue.py` | `python3 consume_queue.py <recipient> <mesh> --once` | 0 done/idle · 1 runtime · 2 missing · 3 validation · 4 security halt · 5 adapter failure | `find_root`, `verify_unit_cell`, `persist_state` |
+| `continuation_schema.py` | Imported formation library | N/A | Standard library; checked-in schemas |
+| `resume_thread.py` | `python3 resume_thread.py <intent_uuid> --dry-run [--at <ISO-8601>] [--start <path>]` | 0 resumable · 10 active · 11 human · 12 terminal · 20 reconcile · 30 invalid · 40 unavailable | `find_root`, `continuation_schema` |
 
 ---
 

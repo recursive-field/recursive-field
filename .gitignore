@@ -24,6 +24,9 @@ state/ledger.jsonl
 state/control_profile.json
 state/hierarchy.json
 
+# --- Formation-Owned Continuation Runtime (intent/checkpoint instances) ---
+state/continuations/
+
 # --- Keys & Secrets ---
 keys/
 *.key

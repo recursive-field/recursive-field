@@ -91,7 +91,7 @@ KNOWLEDGE_DIR=state/knowledge/urban_ops     # Urban Operations intelligence
 
 ---
 
-## Script Inventory (17 Scripts)
+## Script Inventory (19 Scripts / Modules)
 
 | Script | Function |
 | --- | --- |
@@ -112,6 +112,8 @@ KNOWLEDGE_DIR=state/knowledge/urban_ops     # Urban Operations intelligence
 | `entrypoint.py` | Container boot: discovery to health to prompt to injection to activation |
 | `delegate_task.py` | Capability-gated task delegation across mesh queues |
 | `consume_queue.py` | Bounded async worker with durable cursor, atomic claims, and allowlisted execution |
+| `continuation_schema.py` | Canonical JSON, embedded-hash validation, schema checks, and atomic continuation writes |
+| `resume_thread.py` | Read-only continuation eligibility classifier; only `--dry-run` is supported |
 
 ### Bounded Asynchronous Delegation
 
@@ -137,6 +139,40 @@ Async runtime artifacts live beneath the already-ignored formation trees:
 `coordinate` capability before claiming work; `lockdown` leaves the task pending.
 Task payloads are never interpreted as shell commands.
 
+### Formation-Owned Intent Continuity
+
+Continuation contracts are defined by
+`schemas/continuation-intent.schema.json` and
+`schemas/continuation-checkpoint.schema.json`. Runtime instances live under the
+ignored formation state tree at `state/continuations/{intents,checkpoints}/`.
+Artifacts bind canonical SHA-256 values to field genesis, opaque caller-supplied
+context identity, security posture, context evidence, checkpoint ancestry, lease
+state, and an explicit non-actuating effect boundary.
+
+Step 2 provides classification only:
+
+```bash
+python3 resume_thread.py <intent_uuid> --dry-run \
+  [--at 2026-01-01T00:05:00+00:00] [--start <field_path>]
+```
+
+The command emits one stable canonical JSON line and classifies the intent as
+`resumable`, `active`, `awaiting_human`, `terminal`, `needs_reconciliation`,
+`invalid`, or `unavailable`. Output includes the resolved `checkpoint_id`,
+`eligible`, sorted `reasons`, `blocking_conditions`, and explicit
+`would_claim`, `would_dispatch`, `would_write`, and `would_execute` flags. The
+four `would_*` fields are always `false` because Step 2 has no actuating mode;
+only `resumable` is eligible, and its blocking list is empty. Exit codes are
+respectively `0`, `10`, `11`, `12`, `20`, `30`, and `40`. `--at` makes lease
+evaluation reproducible; when omitted, the current UTC time is used but is not
+written or included in output.
+
+`resume_thread.py` reads only the explicit formation artifacts, genesis marker,
+and current control profile. It does not query Agent Zero, discover chats, claim
+work, advance leases, append events, create results, start model turns, replay
+effects, or mutate any file. Repeated fixed-input dry-runs therefore preserve
+byte-identical runtime state.
+
 ### Optional systemd scheduling
 
 [`systemd/`](systemd/) contains brand-neutral source templates for a hardened
@@ -146,7 +182,7 @@ Docker starts auto-restarted bind-mounted containers. A missing mount cannot
 silently fall back to the root-disk directory. See
 [`systemd/README.md`](systemd/README.md) for substitutions, validation,
 installation, recovery, and rollback. These unit templates do not change the
-17-script inventory.
+19-script/module inventory.
 
 ---
 
@@ -176,7 +212,7 @@ For the complete, authoritative architectural reference, see:
 ## Git vs. Generated Separation
 
 **Committed (The Scaffold):**
-- All 17 function-literal Python scripts
+- All 19 function-literal Python scripts/modules
 - Brand-neutral `systemd/` service/timer templates and deployment instructions
 - `.recursive-field-root` genesis marker
 - `RECURSIVE_FIELD_SPEC.md` specification
