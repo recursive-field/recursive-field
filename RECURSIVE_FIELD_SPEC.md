@@ -311,27 +311,34 @@ When invoked as a CLI, the worker uses a non-empty `FIELD_ROOT` environment
 value as its discovery start. Direct Python callers retain the explicit `start`
 argument contract.
 
-### 6.4 Formation-Owned Continuation Intent (`continuation_schema.py`, `resume_thread.py`)
+### 6.4 Formation-Owned Continuation Intent (`continuation_schema.py`, `resume_thread.py`, `checkpoint_intent.py`, `continuation_reflex.py`)
 
 Intent continuity remains on the Formation side of the Engine/Formation
 boundary. Draft 2020-12 contracts in
 `schemas/continuation-intent.schema.json` and
-`schemas/continuation-checkpoint.schema.json` describe explicit opt-in artifacts
-under `state/continuations/{intents,checkpoints}/`. Context identifiers are
-opaque caller-supplied coordinates rather than inferred Engine grammar.
+`schemas/continuation-checkpoint.schema.json` describe explicit opt-in state;
+`schemas/continuation-reflex.schema.json` describes adapter-neutral request,
+claim, and fired-receipt artifacts under `state/continuations/`. Context
+identifiers are opaque caller-supplied coordinates rather than inferred Engine
+grammar.
 
-`continuation_schema.py` supplies dependency-free schema enforcement, stable
-UTF-8 canonical JSON, embedded SHA-256 sealing/validation, timezone-aware lease
-validation, context-evidence binding, a complete non-actuating effect boundary,
-and same-directory atomic writes with file and directory `fsync`. Checkpoint
-ancestry links every prior checkpoint by canonical UUID and hash.
+`continuation_schema.py` supplies dependency-free schema enforcement, pure
+constructors, stable UTF-8 canonical JSON, embedded SHA-256 sealing/validation,
+timezone-aware lease validation, context-evidence binding, a complete
+non-actuating effect boundary, immutable create-only publication, and
+same-directory atomic writes with file and directory `fsync`. Sequence-bearing
+checkpoint ancestry links every prior checkpoint by canonical UUID and hash.
+Intent and checkpoint state also preserve interruption class, token source/model,
+bounded retry attempts, work vector, path-and-hash file state, Git commit,
+subordinate context IDs, and parallel-job/result references.
 
 `resume_thread.py <intent_uuid> --dry-run` is a strictly read-only eligibility
 classifier. It validates regular non-symlink paths confined to the field root,
-genesis identity, intent/checkpoint hashes and linkage, the complete checkpoint
-chain, current security profile and required capabilities, attested context
-evidence, lease currency, and state/effect consistency. Its classifications and
-exit codes are:
+genesis identity, intent/checkpoint hashes, sequences and linkage, the complete
+checkpoint chain, current security profile and required capabilities, attested
+context evidence, lease currency and boot identity, consequential-dispatch
+reconciliation, and state/effect consistency. Its classifications and exit
+codes are:
 
 | Classification | Exit | Meaning |
 | --- | ---: | --- |
@@ -342,6 +349,11 @@ exit codes are:
 | `needs_reconciliation` | 20 | Valid artifacts with lease, state, or security drift |
 | `invalid` | 30 | Malformed, tampered, unsafe, or mislinked evidence |
 | `unavailable` | 40 | Required formation artifact or current context attestation absent |
+
+For `external` interruptions, classification requires a current token snapshot.
+A saved `capped` model observed as `metered`, or an unavailable current snapshot,
+returns `awaiting_human` (exit 11). Retry-budget exhaustion likewise requires
+`awaiting_human`; no formation path clears that authority barrier automatically.
 
 Output is one canonical JSON line with the resolved `checkpoint_id`,
 classification, eligibility, sorted reasons, blocking conditions, and explicit
@@ -354,6 +366,60 @@ Engine chats nor calls an Agent Zero endpoint, and it cannot claim an intent,
 advance a lease, mutate a chat, create lifecycle records, start a model turn,
 replay an effect, install a service, or deploy. These omissions are the Step 2
 effect boundary, not deferred side effects hidden behind dry-run.
+
+Step 3 adds explicit formation-side recording through
+`checkpoint_intent.py arm` and `checkpoint_intent.py checkpoint`. Arming requires
+a caller-selected canonical intent UUID, opaque context ID, history hash,
+observation and creation times, a positive formation attestation, and required
+capabilities available in the active security profile, plus interruption class,
+token snapshot, retry policy, and a self-contained work/file/Git/subordinate
+snapshot. A checkpoint requires an expected intent SHA-256 compare-and-swap
+token, a caller-selected checkpoint UUID, timestamp, state, and state-consistent
+lease and dispatch evidence.
+
+Intent heads are updated under a per-intent `flock`; checkpoint names are
+immutable. Publication is create-only, exact byte-identical retries are
+idempotent, and conflicting reuse cannot replace the prior inode. A checkpoint
+published before an interrupted intent-head update remains recoverable: an
+exact retry reuses the immutable record and completes the locked head update.
+Transitions fail closed on sequence or predecessor mismatch, genesis/context/
+security/effect-boundary drift, held-lease coordinate omissions, lease attempt
+or boot changes during renewal, non-incrementing generation, non-extending
+expiry, successors after terminal state, or progress beyond `awaiting_human`.
+That human gate is an authority barrier; this recorder cannot clear it.
+
+Held leases bind holder, attempt UUID, positive generation, Linux boot UUID,
+acquisition time, and expiry. `resume_thread.py` classifies a current held lease
+from a different boot as `needs_reconciliation`. Checkpoint dispatch evidence
+can be `none`, `unreconciled`, or `reconciled`; an unreconciled consequential
+dispatch also classifies as `needs_reconciliation`, and later ancestry may
+advance only through a matching reconciliation record. The recorder never
+performs the represented dispatch or any other external effect.
+
+`generate_continuation_fixtures.py --test-only --output-root <new-path>` creates
+deterministic isolated test fields and a manifest for all seven classifier
+outcomes. It requires an explicit new output root and refuses the live project
+and its descendants; it never writes `state/continuations` in the project.
+
+`continuation_reflex.py` defines the narrow formation/Engine handoff without
+pretending that a pre-runtime process can mutate an in-memory Agent Zero context.
+An eligible explicit intent yields a deterministic immutable request carrying a
+trusted system-protocol payload, `maximum_new_turns=1`,
+`user_message_sent=false`, and requirements for an existing idle context. Adapter
+claims and `continuation_reflex_fired` receipts are immutable and retry-bounded.
+The formation module never performs injection or starts a turn.
+
+The repository-owned installable Agent Zero package is
+`agent_zero_plugins/continuation_reflex/`; `/a0/usr/plugins/continuation_reflex`
+is an ignored runtime copy, not the commit boundary. The plugin validates
+requests, immutable intent/checkpoint/hash bindings, strict existing-context
+lookup, context idleness, retry and `awaiting_human` barriers, external token
+drift, old-boot leases, and existing claim/receipt evidence. It remains inert
+because the current framework has no native typed-system/protocol,
+one-model-turn entrypoint that avoids user-history insertion. It neither claims,
+injects, dispatches, nor records a fired receipt until that framework boundary
+exists. Installation is an explicit stopped-runtime copy or normal plugin-manager
+operation, as documented in `agent_zero_plugins/README.md`.
 
 ### 6.5 Optional systemd queue scheduling
 
@@ -393,10 +459,11 @@ Bridges governance to live runtime at container boot:
 | 1. Container Field Discovery | `find_root()` from cwd or `/a0/` + `init_environment()` path validation |
 | 2. Health Audit | `rebalance.py --dry-run` (unless `--skip-rebalance`) |
 | 3. System Prompt Assembly | `build_prompt_pipeline.py <slug>` generates governance-aware prompt |
-| 4. Native Context Injection | Copies assembled prompt to `prompts/system_prompt.md` |
-| 5. Activation Event | `container_activated` with hostname, prompt hash, security profile |
+| 4. Native Prompt Projection | Copies assembled prompt to `prompts/system_prompt.md` for later framework loading; does not enter a context loop |
+| 5. Optional Continuation Handoff | Classifies one explicit intent and prepares an immutable adapter request; no chat or model action |
+| 6. Activation Event | `container_activated` with hostname, prompt hash, security profile |
 
-**Invocation**: `python3 entrypoint.py <slug> [--dry-run] [--skip-rebalance]`
+**Invocation**: `python3 entrypoint.py <slug> [--dry-run] [--skip-rebalance] [--continuation-intent-id <uuid> --continuation-at <RFC3339> --continuation-boot-id <uuid> --current-token-source <source> --current-token-model capped|metered]`
 
 ### 7.2 Host-Mount Verification
 
@@ -503,7 +570,7 @@ The resolver uses `KEY = VALUE` pairs to promote knowledge bindings above the st
 
 | Metric | Value |
 | --- | --- |
-| Total scripts/modules | 19 |
+| Total scripts/modules | 22 |
 | Active agents | 3 (`field-sentinel`, `field-scout`, `sentinel-sub-1`) |
 | Active meshes | 2 (`sentinel-scout-mesh`, `field-sentinel-sentinel-sub-1-mesh`) |
 | Active gateways | 2 (`sentinel-cli-gw`, `mesh-api-gw`) |
@@ -529,10 +596,13 @@ The resolver uses `KEY = VALUE` pairs to promote knowledge bindings above the st
 | 13 | `build_prompt_pipeline.py` | 0 | 5 layers + token budgeting + SHA-256 hash + lockdown filtering |
 | 14 | `spawn_subordinate.py` | 0 | Parent-child + security capping + auto-mesh + hierarchy ledger |
 | 15 | `rebalance.py` | 0 | Topology audit + hierarchy repair + multi-agent events |
-| 16 | `entrypoint.py` | 0 | Discovery → health → prompt → injection → activation event |
+| 16 | `entrypoint.py` | 0 | Discovery → health → prompt projection → optional fail-closed continuation handoff → activation event |
 | 17 | *(host mount)* | 0 | Full lifecycle at `/tmp/mnt_rootfs_test/recursive-field` — zero drift |
 | 18 | `delegate_task.py` | 0/4 | Delegation + queue events + bi-directional logs + lockdown gate (exit 4) |
 | 19 | `consume_queue.py` | 0/3/4/5 | Once-only execution + replay/tamper/lockdown handling + persisted result |
+| 20 | `checkpoint_intent.py` | 0/3/4/5 | Explicit arm/checkpoint recording, immutable checkpoint publish, locked CAS head update |
+| 21 | `continuation_reflex.py` | N/A | Fail-closed request/claim/fired-receipt handoff for a future trusted in-process adapter |
+| 22 | `generate_continuation_fixtures.py` | 0/2 | Test-only deterministic fixtures for all seven classifications |
 
 ### 11.3 Portability Proof
 
@@ -568,9 +638,22 @@ The resolver uses `KEY = VALUE` pairs to promote knowledge bindings above the st
 ├── consume_queue.py            # Bounded async queue worker
 ├── continuation_schema.py      # Continuation schema/hash/write contracts
 ├── resume_thread.py            # Read-only continuation dry-run classifier
+├── checkpoint_intent.py        # Explicit formation-side arm/checkpoint recorder
+├── continuation_reflex.py      # Adapter-neutral continuation handoff/audit contract
+├── generate_continuation_fixtures.py # Deterministic test-only fixture fields
 ├── schemas/
 │   ├── continuation-intent.schema.json
-│   └── continuation-checkpoint.schema.json
+│   ├── continuation-checkpoint.schema.json
+│   └── continuation-reflex.schema.json
+├── agent_zero_plugins/         # Tracked installable plugin packages (not formation scripts)
+│   ├── README.md               # Packaging/install boundary
+│   └── continuation_reflex/    # Fail-closed Agent Zero user-plugin source
+│       ├── plugin.yaml
+│       ├── default_config.yaml
+│       ├── hooks.py
+│       ├── helpers/runtime.py
+│       ├── extensions/python/job_loop/_50_continuation_reflex.py
+│       └── tests/test_runtime.py
 ├── systemd/                    # Optional rendered host scheduler (not scripts)
 │   ├── docker.service.d/
 │   │   └── field-root.conf.in  # Docker exact-mount prerequisite drop-in
@@ -640,7 +723,9 @@ state/
 ├── ledger.jsonl               # Append-only SHA-256 state ledger
 ├── continuations/             # Ignored formation-owned runtime instances
 │   ├── intents/<intent_uuid>.json
-│   └── checkpoints/<checkpoint_uuid>.json
+│   ├── checkpoints/<checkpoint_uuid>.json
+│   ├── locks/<intent_uuid>.lock
+│   └── reflex/{requests,claims,receipts}/
 ├── seeds/
 │   └── sentinel_observer.json  # Default seed stone definition
 └── snapshots/
@@ -667,11 +752,14 @@ state/
 | `build_prompt_pipeline.py` | `python3 build_prompt_pipeline.py <slug> [--out-file <path>] [--json]` | 0 OK · 1 no root · 2 no agent | `find_root` |
 | `spawn_subordinate.py` | `python3 spawn_subordinate.py <parent> <child> [role] [--seed <name>]` | 0 spawned · 1 no root · 2 bad · 3 exists · 4 security | `find_root`, `create_agent`, `create_mesh`, `hydrate_profile` |
 | `rebalance.py` | `python3 rebalance.py [--dry-run] [--prune-scratch] [--repair-hierarchy]` | 0 OK · 1 no root · 2 critical fail | `find_root` |
-| `entrypoint.py` | `python3 entrypoint.py <slug> [--dry-run] [--skip-rebalance]` | 0 activated · 1 no root · 2 no agent · 3 health fail | `find_root`, `build_prompt_pipeline`, `rebalance`, `init_environment` |
+| `entrypoint.py` | `python3 entrypoint.py <slug> [--dry-run] [--skip-rebalance] [--continuation-intent-id <uuid> ...]` | 0 activated · 1 no root · 2 no agent · 3 health fail | `find_root`, `build_prompt_pipeline`, `rebalance`, `init_environment`, `continuation_reflex` |
 | `delegate_task.py` | `python3 delegate_task.py <sender> <recipient> <mesh> "<payload>" [--payload-file <path>] [--mode acknowledge|async]` | 0 delegated · 1 no root · 2 no agent/mesh · 3 no connection · 4 security | `find_root` |
 | `consume_queue.py` | `python3 consume_queue.py <recipient> <mesh> --once` | 0 done/idle · 1 runtime · 2 missing · 3 validation · 4 security halt · 5 adapter failure | `find_root`, `verify_unit_cell`, `persist_state` |
 | `continuation_schema.py` | Imported formation library | N/A | Standard library; checked-in schemas |
-| `resume_thread.py` | `python3 resume_thread.py <intent_uuid> --dry-run [--at <ISO-8601>] [--start <path>]` | 0 resumable · 10 active · 11 human · 12 terminal · 20 reconcile · 30 invalid · 40 unavailable | `find_root`, `continuation_schema` |
+| `resume_thread.py` | `python3 resume_thread.py <intent_uuid> --dry-run [--at <ISO-8601>] [--boot-id <uuid>] [--current-token-source <source> --current-token-model capped|metered] [--start <path>]` | 0 resumable · 10 active · 11 human · 12 terminal · 20 reconcile · 30 invalid · 40 unavailable | `find_root`, `continuation_schema` |
+| `checkpoint_intent.py` | `python3 checkpoint_intent.py arm ...` or `python3 checkpoint_intent.py checkpoint <intent_uuid> ...` | 0 recorded/idempotent · 3 invalid · 4 conflict · 5 unavailable | `find_root`, `continuation_schema`, `resume_thread` validation helpers |
+| `continuation_reflex.py` | Imported formation handoff library | N/A | `continuation_schema`, `resume_thread`; trusted Agent Zero adapter intentionally blocked on missing native entrypoint |
+| `generate_continuation_fixtures.py` | `python3 generate_continuation_fixtures.py --test-only --output-root <new-path>` | 0 generated · 2 refused/invalid | `continuation_schema` |
 
 ---
 

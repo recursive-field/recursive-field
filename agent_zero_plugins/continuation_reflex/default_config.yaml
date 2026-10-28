@@ -1,0 +1,5 @@
+enabled: false
+field_root: ""
+current_token_source: ""
+current_token_model: ""
+scan_interval_seconds: 60

@@ -2,11 +2,13 @@
 """Native Container Entrypoint for the Recursive Field.
 
 Acts as the primary activation script executed when an agent container
-initializes. Bridges field root discovery, prompt assembly, and Agent
-Zero's context loop.
+initializes. It bridges field-root discovery, health inspection, prompt assembly
+and filesystem projection, an optional fail-closed continuation handoff, and the
+formation activation event. It does not enter or mutate Agent Zero's in-memory
+context loop.
 
 Usage:
-    python3 field_entrypoint.py <agent_slug> [--dry-run] [--skip-rebalance]
+    python3 entrypoint.py <agent_slug> [--dry-run] [--skip-rebalance]
 
 Exit codes:
     0  entrypoint activated successfully
@@ -37,6 +39,8 @@ from find_root import find_root  # noqa: E402
 from build_prompt_pipeline import build_prompt_pipeline  # noqa: E402
 from rebalance import rebalance  # noqa: E402
 from init_environment import init_environment  # noqa: E402
+from continuation_reflex import prepare_reflex_request  # noqa: E402
+from continuation_schema import parse_timestamp  # noqa: E402
 
 MARKER_FILENAME = ".recursive-field-root"
 ENV_FILENAME = "field_env.json"
@@ -136,6 +140,11 @@ def entrypoint(
     dry_run: bool = False,
     skip_rebalance: bool = False,
     start: str | os.PathLike[str] | None = None,
+    continuation_intent_id: str | None = None,
+    continuation_at: datetime | None = None,
+    continuation_boot_id: str | None = None,
+    current_token_source: str | None = None,
+    current_token_model: str | None = None,
 ) -> dict:
     """Execute the container entrypoint activation sequence.
 
@@ -144,6 +153,11 @@ def entrypoint(
         dry_run: If True, audit only — no mutations or event logging.
         skip_rebalance: If True, skip health audit.
         start: Directory to begin root discovery from.
+        continuation_intent_id: Optional explicit durable intent to hand off.
+        continuation_at: Evaluation time for deterministic classification.
+        continuation_boot_id: Current boot UUID override.
+        current_token_source: Current token source for external-interruption guardrail.
+        current_token_model: Current token economics model (capped or metered).
 
     Returns:
         A dict with activation metadata.
@@ -216,6 +230,32 @@ def entrypoint(
             agent_dir, assembled_path
         )
 
+    # A pre-runtime entrypoint cannot inject trusted protocol into an in-memory
+    # Agent Zero context.  It can only prepare an immutable, fail-closed handoff
+    # for a future in-process adapter.  No user message or model turn occurs here.
+    continuation_handoff = None
+    if continuation_intent_id is not None:
+        request, disposition, request_path = prepare_reflex_request(
+            root=root,
+            intent_id=continuation_intent_id,
+            at=continuation_at or datetime.now(timezone.utc),
+            boot_id=continuation_boot_id,
+            current_token_source=current_token_source,
+            current_token_model=current_token_model,
+            persist=not dry_run,
+        )
+        continuation_handoff = {
+            "request_id": request["request_id"],
+            "intent_id": request["intent_id"],
+            "context_id": request["context_id"],
+            "disposition": disposition,
+            "path": str(request_path),
+            "maximum_new_turns": request["system_protocol"]["maximum_new_turns"],
+            "injection_role": request["system_protocol"]["role"],
+            "user_message_sent": request["system_protocol"]["user_message_sent"],
+            "adapter_status": "handoff_only",
+        }
+
     # Container activation event.
     timestamp = _utc_now_iso()
     hostname = socket.gethostname()
@@ -238,6 +278,7 @@ def entrypoint(
             audit_result.get("critical_count", 0)
             if audit_result else None
         ),
+        "continuation_handoff": continuation_handoff,
     }
 
     if not dry_run:
@@ -256,6 +297,7 @@ def entrypoint(
         "audit_result": audit_result,
         "dry_run": dry_run,
         "timestamp": timestamp,
+        "continuation_handoff": continuation_handoff,
     }
 
 
@@ -270,6 +312,12 @@ def _print_result(result: dict) -> None:
     print(f"Assembled: {result['assembled_prompt_path']}")
     if result.get("native_prompt_path"):
         print(f"Native Link: {result['native_prompt_path']}")
+    handoff = result.get("continuation_handoff")
+    if handoff:
+        print(
+            "Continuation Handoff: "
+            f"{handoff['request_id']} ({handoff['disposition']}; adapter required)"
+        )
     audit = result.get("audit_result")
     if audit:
         print(
@@ -292,6 +340,21 @@ def main(argv: list[str] | None = None) -> int:
         "--skip-rebalance", action="store_true",
         help="Skip health audit before activation",
     )
+    parser.add_argument(
+        "--continuation-intent-id",
+        help="explicit continuation intent UUID; prepares a trusted-adapter handoff only",
+    )
+    parser.add_argument(
+        "--continuation-at",
+        type=lambda value: parse_timestamp(value, "--continuation-at"),
+        help="timezone-aware continuation classification time",
+    )
+    parser.add_argument("--continuation-boot-id")
+    parser.add_argument("--current-token-source")
+    parser.add_argument(
+        "--current-token-model",
+        choices=("capped", "metered"),
+    )
     args = parser.parse_args(argv)
 
     try:
@@ -299,6 +362,11 @@ def main(argv: list[str] | None = None) -> int:
             args.agent_slug,
             dry_run=args.dry_run,
             skip_rebalance=args.skip_rebalance,
+            continuation_intent_id=args.continuation_intent_id,
+            continuation_at=args.continuation_at,
+            continuation_boot_id=args.continuation_boot_id,
+            current_token_source=args.current_token_source,
+            current_token_model=args.current_token_model,
         )
     except RuntimeError as exc:
         print(f"Error: {exc}", file=sys.stderr)

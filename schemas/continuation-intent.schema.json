@@ -12,6 +12,10 @@
     "context_id",
     "created_at",
     "status",
+    "interruption_class",
+    "token_snapshot",
+    "retry_budget",
+    "work_snapshot",
     "security",
     "context_evidence",
     "effect_boundary",
@@ -19,16 +23,29 @@
     "intent_sha256"
   ],
   "properties": {
-    "schema_version": {"const": "1.0.0"},
-    "artifact_type": {"const": "continuation_intent"},
-    "intent_id": {"type": "string", "format": "uuid"},
-    "field_genesis_uuid": {"type": "string", "format": "uuid"},
+    "schema_version": {
+      "const": "1.0.0"
+    },
+    "artifact_type": {
+      "const": "continuation_intent"
+    },
+    "intent_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "field_genesis_uuid": {
+      "type": "string",
+      "format": "uuid"
+    },
     "context_id": {
       "type": "string",
       "minLength": 1,
       "maxLength": 256
     },
-    "created_at": {"type": "string", "format": "date-time"},
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
     "status": {
       "enum": [
         "armed",
@@ -40,19 +57,58 @@
         "failed"
       ]
     },
-    "security": {"$ref": "#/$defs/security"},
-    "context_evidence": {"$ref": "#/$defs/context_evidence"},
-    "effect_boundary": {"$ref": "#/$defs/effect_boundary"},
+    "interruption_class": {
+      "enum": [
+        "self_initiated",
+        "external"
+      ]
+    },
+    "token_snapshot": {
+      "$ref": "#/$defs/token_snapshot"
+    },
+    "retry_budget": {
+      "$ref": "#/$defs/retry_budget"
+    },
+    "work_snapshot": {
+      "$ref": "#/$defs/work_snapshot"
+    },
+    "security": {
+      "$ref": "#/$defs/security"
+    },
+    "context_evidence": {
+      "$ref": "#/$defs/context_evidence"
+    },
+    "effect_boundary": {
+      "$ref": "#/$defs/effect_boundary"
+    },
     "latest_checkpoint": {
-      "type": ["object", "null"],
+      "type": [
+        "object",
+        "null"
+      ],
       "additionalProperties": false,
-      "required": ["checkpoint_id", "checkpoint_sha256"],
+      "required": [
+        "checkpoint_id",
+        "checkpoint_sha256",
+        "sequence"
+      ],
       "properties": {
-        "checkpoint_id": {"type": "string", "format": "uuid"},
-        "checkpoint_sha256": {"$ref": "#/$defs/sha256"}
+        "checkpoint_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "checkpoint_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 1
+        }
       }
     },
-    "intent_sha256": {"$ref": "#/$defs/sha256"}
+    "intent_sha256": {
+      "$ref": "#/$defs/sha256"
+    }
   },
   "$defs": {
     "sha256": {
@@ -62,7 +118,10 @@
     "security": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["profile", "required_capabilities"],
+      "required": [
+        "profile",
+        "required_capabilities"
+      ],
       "properties": {
         "profile": {
           "type": "string",
@@ -95,16 +154,27 @@
         "evidence_sha256"
       ],
       "properties": {
-        "source": {"const": "formation_attestation"},
+        "source": {
+          "const": "formation_attestation"
+        },
         "context_id": {
           "type": "string",
           "minLength": 1,
           "maxLength": 256
         },
-        "observed_at": {"type": "string", "format": "date-time"},
-        "exists": {"type": "boolean"},
-        "history_sha256": {"$ref": "#/$defs/sha256"},
-        "evidence_sha256": {"$ref": "#/$defs/sha256"}
+        "observed_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "exists": {
+          "type": "boolean"
+        },
+        "history_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "evidence_sha256": {
+          "$ref": "#/$defs/sha256"
+        }
       }
     },
     "effect_boundary": {
@@ -117,9 +187,17 @@
         "prohibited_effects"
       ],
       "properties": {
-        "mode": {"const": "classification_only"},
-        "allows_actuation": {"type": "boolean", "const": false},
-        "allowed_effects": {"type": "array", "maxItems": 0},
+        "mode": {
+          "const": "classification_only"
+        },
+        "allows_actuation": {
+          "type": "boolean",
+          "const": false
+        },
+        "allowed_effects": {
+          "type": "array",
+          "maxItems": 0
+        },
         "prohibited_effects": {
           "type": "array",
           "minItems": 8,
@@ -135,6 +213,168 @@
               "model_turn",
               "system_service_change"
             ]
+          }
+        }
+      }
+    },
+    "token_snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "token_source",
+        "token_model"
+      ],
+      "properties": {
+        "token_source": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "token_model": {
+          "enum": [
+            "capped",
+            "metered"
+          ]
+        }
+      }
+    },
+    "retry_budget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "maximum_attempts",
+        "attempts_used"
+      ],
+      "properties": {
+        "maximum_attempts": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "attempts_used": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "file_state_entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "status",
+        "sha256"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024,
+          "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+$"
+        },
+        "status": {
+          "enum": [
+            "unchanged",
+            "modified",
+            "added",
+            "deleted",
+            "untracked"
+          ]
+        },
+        "sha256": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "parallel_reference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "job_id",
+        "context_id",
+        "state",
+        "result_ref"
+      ],
+      "properties": {
+        "job_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "context_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "state": {
+          "enum": [
+            "pending",
+            "running",
+            "success",
+            "error",
+            "cancelled",
+            "timeout"
+          ]
+        },
+        "result_ref": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "maxLength": 2048
+        }
+      }
+    },
+    "work_snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "work_vector",
+        "file_state",
+        "git_commit",
+        "subordinate_context_ids",
+        "parallel_references"
+      ],
+      "properties": {
+        "work_vector": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192
+        },
+        "file_state": {
+          "type": "array",
+          "maxItems": 512,
+          "items": {
+            "$ref": "#/$defs/file_state_entry"
+          }
+        },
+        "git_commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "subordinate_context_ids": {
+          "type": "array",
+          "maxItems": 256,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
+        },
+        "parallel_references": {
+          "type": "array",
+          "maxItems": 256,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/parallel_reference"
           }
         }
       }

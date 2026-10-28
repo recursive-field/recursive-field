@@ -34,6 +34,7 @@ from continuation_schema import (  # noqa: E402
     TERMINAL_STATES,
     ContinuationValidationError,
     canonical_json_bytes,
+    checkpoint_pointer,
     parse_timestamp,
     read_json_document,
 )
@@ -197,6 +198,15 @@ def _checkpoint_path(root: Path, checkpoint_id: str) -> Path:
     return root / CONTINUATIONS_PATH / "checkpoints" / f"{checkpoint_id}.json"
 
 
+def _read_boot_id() -> str | None:
+    """Return the current Linux boot UUID, or ``None`` when unavailable."""
+    try:
+        value = Path("/proc/sys/kernel/random/boot_id").read_text(encoding="ascii").strip()
+    except OSError:
+        return None
+    return value if _canonical_uuid(value) else None
+
+
 def _validate_checkpoint_chain(
     root: Path,
     latest: Mapping[str, Any],
@@ -204,6 +214,7 @@ def _validate_checkpoint_chain(
 ) -> tuple[dict[str, Any] | None, Classification | None]:
     pointer: Mapping[str, Any] | None = latest
     newer_recorded_at: datetime | None = None
+    newer_checkpoint: dict[str, Any] | None = None
     visited: set[str] = set()
     newest: dict[str, Any] | None = None
 
@@ -235,6 +246,10 @@ def _validate_checkpoint_chain(
             return None, _result(
                 "invalid", intent["intent_id"], "checkpoint_link_hash_mismatch"
             )
+        if checkpoint["sequence"] != pointer["sequence"]:
+            return None, _result(
+                "invalid", intent["intent_id"], "checkpoint_link_sequence_mismatch"
+            )
         if checkpoint["checkpoint_id"] != checkpoint_id:
             return None, _result(
                 "invalid", intent["intent_id"], "checkpoint_link_id_mismatch"
@@ -261,6 +276,29 @@ def _validate_checkpoint_chain(
             return None, _result(
                 "invalid", intent["intent_id"], "checkpoint_predates_intent"
             )
+        if newer_checkpoint is not None:
+            if newer_checkpoint["sequence"] != checkpoint["sequence"] + 1:
+                return None, _result(
+                    "invalid", intent["intent_id"], "checkpoint_sequence_invalid"
+                )
+            if checkpoint["state"] in TERMINAL_STATES:
+                return None, _result(
+                    "invalid", intent["intent_id"], "checkpoint_after_terminal_state"
+                )
+            if checkpoint["state"] == "awaiting_human":
+                return None, _result(
+                    "invalid", intent["intent_id"], "checkpoint_after_human_gate"
+                )
+            if checkpoint["dispatch"]["state"] == "unreconciled":
+                dispatch = newer_checkpoint["dispatch"]
+                if (
+                    dispatch["state"] != "reconciled"
+                    or dispatch["dispatch_id"] != checkpoint["dispatch"]["dispatch_id"]
+                    or dispatch["effect_sha256"] != checkpoint["dispatch"]["effect_sha256"]
+                ):
+                    return None, _result(
+                        "invalid", intent["intent_id"], "dispatch_reconciliation_invalid"
+                    )
         if newest is not None and checkpoint["state"] in TERMINAL_STATES:
             return None, _result(
                 "invalid", intent["intent_id"], "checkpoint_after_terminal_state"
@@ -268,8 +306,11 @@ def _validate_checkpoint_chain(
         newer_recorded_at = recorded_at
         if newest is None:
             newest = checkpoint
+        newer_checkpoint = checkpoint
         pointer = checkpoint["previous_checkpoint"]
 
+    if newer_checkpoint is not None and newer_checkpoint["sequence"] != 1:
+        return None, _result("invalid", intent["intent_id"], "checkpoint_genesis_sequence_invalid")
     return newest, None
 
 
@@ -278,8 +319,25 @@ def _classify_state(
     checkpoint: Mapping[str, Any] | None,
     at: datetime,
     drift_reasons: tuple[str, ...],
+    boot_id: str | None,
+    current_token_source: str | None,
+    current_token_model: str | None,
 ) -> Classification:
     intent_id = intent["intent_id"]
+    retry = checkpoint["retry_budget"] if checkpoint is not None else intent["retry_budget"]
+    if retry["attempts_used"] >= retry["maximum_attempts"]:
+        return _result("awaiting_human", intent_id, "retry_budget_exhausted")
+    if intent["interruption_class"] == "external":
+        if current_token_source is None or current_token_model is None:
+            return _result("awaiting_human", intent_id, "current_token_snapshot_unavailable")
+        snapshot = intent["token_snapshot"]
+        if snapshot["token_model"] == "capped" and current_token_model == "metered":
+            return _result(
+                "awaiting_human",
+                intent_id,
+                "external_capped_to_metered_drift",
+                f"token_source_changed:{snapshot['token_source']}->{current_token_source}",
+            )
     if drift_reasons:
         return _result("needs_reconciliation", intent_id, *drift_reasons)
 
@@ -304,6 +362,9 @@ def _classify_state(
     if intent["effect_boundary"] != checkpoint["effect_boundary"]:
         reconciliation.append("intent_checkpoint_effect_boundary_drift")
 
+    if checkpoint["dispatch"]["state"] == "unreconciled":
+        reconciliation.append("consequential_dispatch_unreconciled")
+
     lease = checkpoint["lease"]
     lease_state = lease["state"]
     held_and_current = False
@@ -316,6 +377,10 @@ def _classify_state(
             reconciliation.append("lease_expired")
         else:
             held_and_current = True
+            if boot_id is None:
+                reconciliation.append("current_boot_id_unavailable")
+            elif lease["boot_id"] != boot_id:
+                reconciliation.append("lease_boot_id_mismatch")
 
     if state == "active" and not held_and_current:
         reconciliation.append("active_state_without_current_lease")
@@ -340,6 +405,9 @@ def classify_intent(
     *,
     start: str | os.PathLike[str] | None = None,
     at: datetime | None = None,
+    boot_id: str | None = None,
+    current_token_source: str | None = None,
+    current_token_model: str | None = None,
 ) -> Classification:
     """Classify one explicit continuation intent without mutating any state."""
     if not _canonical_uuid(intent_id):
@@ -348,6 +416,17 @@ def classify_intent(
         at = datetime.now(timezone.utc)
     elif at.tzinfo is None or at.utcoffset() is None:
         return _result("invalid", intent_id, "evaluation_time_missing_offset")
+
+    if boot_id is None:
+        boot_id = _read_boot_id()
+    elif not _canonical_uuid(boot_id):
+        return _result("invalid", intent_id, "boot_id_not_canonical_uuid")
+    if current_token_model not in {None, "capped", "metered"}:
+        return _result("invalid", intent_id, "current_token_model_invalid")
+    if (current_token_source is None) != (current_token_model is None):
+        return _result("invalid", intent_id, "current_token_snapshot_incomplete")
+    if current_token_source is not None and not current_token_source:
+        return _result("invalid", intent_id, "current_token_source_invalid")
 
     try:
         root = find_root(start)
@@ -415,7 +494,15 @@ def classify_intent(
                 "unavailable", intent_id, "checkpoint_context_not_attested"
             ).with_checkpoint(checkpoint["checkpoint_id"])
 
-    result = _classify_state(intent, checkpoint, at, security_reasons)
+    result = _classify_state(
+        intent,
+        checkpoint,
+        at,
+        security_reasons,
+        boot_id,
+        current_token_source,
+        current_token_model,
+    )
     checkpoint_id = checkpoint["checkpoint_id"] if checkpoint is not None else None
     return result.with_checkpoint(checkpoint_id)
 
@@ -444,13 +531,33 @@ def main(argv: list[str] | None = None) -> int:
         help="field-root discovery start (defaults to FIELD_ROOT, then cwd)",
     )
     parser.add_argument(
+        "--boot-id",
+        help="current canonical boot UUID (testing/portable override)",
+    )
+    parser.add_argument(
         "--at",
         type=_parse_at,
         help="timezone-aware ISO-8601 lease evaluation time",
     )
+    parser.add_argument(
+        "--current-token-source",
+        help="current token source identifier for external-interruption guardrail",
+    )
+    parser.add_argument(
+        "--current-token-model",
+        choices=("capped", "metered"),
+        help="current token economics model; required with --current-token-source",
+    )
     args = parser.parse_args(argv)
     start = args.start or os.environ.get("FIELD_ROOT") or None
-    result = classify_intent(args.intent_id, start=start, at=args.at)
+    result = classify_intent(
+        args.intent_id,
+        start=start,
+        at=args.at,
+        boot_id=args.boot_id,
+        current_token_source=args.current_token_source,
+        current_token_model=args.current_token_model,
+    )
     _stable_print(result)
     return result.exit_code
 

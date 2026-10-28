@@ -1,0 +1,445 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://recursive-field.local/schemas/continuation-reflex.schema.json",
+  "title": "Recursive Field continuation reflex handoff and audit record",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "artifact_type",
+    "stage",
+    "event_type",
+    "request_id",
+    "intent_id",
+    "intent_sha256",
+    "checkpoint",
+    "context_id",
+    "recorded_at",
+    "interruption_class",
+    "token_snapshot",
+    "retry_budget",
+    "work_snapshot",
+    "system_protocol",
+    "claim",
+    "fired",
+    "reflex_sha256"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0.0"
+    },
+    "artifact_type": {
+      "const": "continuation_reflex"
+    },
+    "stage": {
+      "enum": [
+        "request",
+        "claim",
+        "fired"
+      ]
+    },
+    "event_type": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        null,
+        "continuation_reflex_fired"
+      ]
+    },
+    "request_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "intent_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "intent_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "checkpoint": {
+      "$ref": "#/$defs/checkpoint_pointer"
+    },
+    "context_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "recorded_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "interruption_class": {
+      "enum": [
+        "self_initiated",
+        "external"
+      ]
+    },
+    "token_snapshot": {
+      "$ref": "#/$defs/token_snapshot"
+    },
+    "retry_budget": {
+      "$ref": "#/$defs/retry_budget"
+    },
+    "work_snapshot": {
+      "$ref": "#/$defs/work_snapshot"
+    },
+    "system_protocol": {
+      "$ref": "#/$defs/system_protocol"
+    },
+    "claim": {
+      "$ref": "#/$defs/claim"
+    },
+    "fired": {
+      "$ref": "#/$defs/fired"
+    },
+    "reflex_sha256": {
+      "$ref": "#/$defs/sha256"
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "checkpoint_pointer": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "checkpoint_id",
+        "checkpoint_sha256",
+        "sequence"
+      ],
+      "properties": {
+        "checkpoint_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "checkpoint_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "token_snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "token_source",
+        "token_model"
+      ],
+      "properties": {
+        "token_source": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "token_model": {
+          "enum": [
+            "capped",
+            "metered"
+          ]
+        }
+      }
+    },
+    "retry_budget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "maximum_attempts",
+        "attempts_used"
+      ],
+      "properties": {
+        "maximum_attempts": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "attempts_used": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "file_state_entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "status",
+        "sha256"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024,
+          "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+$"
+        },
+        "status": {
+          "enum": [
+            "unchanged",
+            "modified",
+            "added",
+            "deleted",
+            "untracked"
+          ]
+        },
+        "sha256": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "parallel_reference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "job_id",
+        "context_id",
+        "state",
+        "result_ref"
+      ],
+      "properties": {
+        "job_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "context_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "state": {
+          "enum": [
+            "pending",
+            "running",
+            "success",
+            "error",
+            "cancelled",
+            "timeout"
+          ]
+        },
+        "result_ref": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "maxLength": 2048
+        }
+      }
+    },
+    "work_snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "work_vector",
+        "file_state",
+        "git_commit",
+        "subordinate_context_ids",
+        "parallel_references"
+      ],
+      "properties": {
+        "work_vector": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192
+        },
+        "file_state": {
+          "type": "array",
+          "maxItems": 512,
+          "items": {
+            "$ref": "#/$defs/file_state_entry"
+          }
+        },
+        "git_commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "subordinate_context_ids": {
+          "type": "array",
+          "maxItems": 256,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
+        },
+        "parallel_references": {
+          "type": "array",
+          "maxItems": 256,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/parallel_reference"
+          }
+        }
+      }
+    },
+    "system_protocol": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "role",
+        "maximum_new_turns",
+        "user_message_sent",
+        "require_existing_context",
+        "require_idle_context",
+        "text",
+        "text_sha256"
+      ],
+      "properties": {
+        "role": {
+          "const": "system"
+        },
+        "maximum_new_turns": {
+          "type": "integer",
+          "const": 1
+        },
+        "user_message_sent": {
+          "type": "boolean",
+          "const": false
+        },
+        "require_existing_context": {
+          "type": "boolean",
+          "const": true
+        },
+        "require_idle_context": {
+          "type": "boolean",
+          "const": true
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32768
+        },
+        "text_sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "claim": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "claim_id",
+        "attempt",
+        "adapter_instance",
+        "boot_id",
+        "claimed_at",
+        "expires_at",
+        "context_exists",
+        "context_was_running"
+      ],
+      "properties": {
+        "claim_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "attempt": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "adapter_instance": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "boot_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "claimed_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "context_exists": {
+          "type": "boolean",
+          "const": true
+        },
+        "context_was_running": {
+          "type": "boolean",
+          "const": false
+        }
+      }
+    },
+    "fired": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "receipt_id",
+        "claim_id",
+        "turn_id",
+        "fired_at",
+        "injection_role",
+        "maximum_new_turns",
+        "user_message_sent",
+        "context_exists",
+        "context_was_running"
+      ],
+      "properties": {
+        "receipt_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "claim_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "turn_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "fired_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "injection_role": {
+          "const": "system"
+        },
+        "maximum_new_turns": {
+          "type": "integer",
+          "const": 1
+        },
+        "user_message_sent": {
+          "type": "boolean",
+          "const": false
+        },
+        "context_exists": {
+          "type": "boolean",
+          "const": true
+        },
+        "context_was_running": {
+          "type": "boolean",
+          "const": false
+        }
+      }
+    }
+  }
+}

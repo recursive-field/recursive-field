@@ -9,9 +9,9 @@
 
 ## Core Principle: The Field Knows Itself
 
-When `KNOWLEDGE_DIR=state/knowledge/recursive_field`, the formation's assembled system prompt contains a complete, SHA-256-hashed self-model of its own 17 scripts, unit cell mechanics, governance system, and multi-node orchestration protocols. This creates a **conceptual recursion** — the agent processes a description of its own architecture to refine its internal self-model and guide its runtime behaviors.
+When `KNOWLEDGE_DIR=state/knowledge/recursive_field`, the formation's assembled system prompt contains a complete, SHA-256-hashed self-model of its own 22 scripts/modules, unit cell mechanics, governance system, continuation contracts, and multi-node orchestration protocols. This creates a **conceptual recursion** — the agent processes a description of its own architecture to refine its internal self-model and guide its runtime behaviors.
 
-## The 17 Function-Literal Scripts
+## The 22 Function-Literal Scripts and Modules
 
 | Script | Function |
 | --- | --- |
@@ -29,9 +29,14 @@ When `KNOWLEDGE_DIR=state/knowledge/recursive_field`, the formation's assembled 
 | `build_prompt_pipeline.py` | 5-layer prompt assembly — Substrate Identity → Behavioral Directives → Security Posture → Filtered Includes & Domain Knowledge → Vantage Point Anchor |
 | `spawn_subordinate.py` | Parent-child hierarchy — security posture inheritance/capping, auto-mesh, `state/hierarchy.json` |
 | `rebalance.py` | Self-maintenance — topology audit, hierarchy edge repair, scratch pruning, multi-agent `field_rebalanced` events |
-| `entrypoint.py` | Container activation — discovery → health audit → prompt assembly → native injection → `container_activated` event |
+| `entrypoint.py` | Container activation — discovery → health audit → prompt assembly/projection → optional fail-closed continuation handoff → `container_activated` event |
 | `delegate_task.py` | Capability-gated task delegation — `task_dispatched` → `task_delegated` → `task_received` → `task_result` across mesh queues |
 | `consume_queue.py` | Bounded asynchronous recipient execution — validates envelopes, claims one allowlisted task, authors results, advances a durable cursor, and persists state |
+| `continuation_schema.py` | Formation-owned continuation constructors and strict schema/hash/transition/lease/effect-boundary validation with atomic and immutable writes |
+| `resume_thread.py` | Read-only seven-way continuation classifier with sequence, boot identity, security, evidence, and reconciliation checks |
+| `checkpoint_intent.py` | Explicit arming and immutable checkpoint recording with per-intent locking and compare-and-swap head advancement |
+| `continuation_reflex.py` | Fail-closed formation handoff: immutable system-protocol request, claim, and `continuation_reflex_fired` receipt contracts without direct Engine actuation |
+| `generate_continuation_fixtures.py` | Deterministic test-only isolated fields spanning all seven continuation classifications |
 
 ## Three-Layer Architecture
 
@@ -67,7 +72,7 @@ Setting `LIBRARY=recursive-field` in `.env` cascades across:
 ## Self-Referential Recursion
 
 This document is the formation knowing itself. When `build_prompt_pipeline.py` loads this into Layer 4, the assembled system prompt contains:
-- A description of the 17 scripts that assembled it
+- A description of the 22 scripts/modules that assemble, coordinate, and preserve it
 - A description of the 5-layer pipeline that laminated it
 - A description of the security profile that filtered it
 - A description of the `{LIBRARY}` resolver that parameterized it
@@ -86,8 +91,8 @@ The formation extends across host boundaries:
 
 ## Operational DNA
 
-The complete operational DNA is committed as a scaffold of 17 function-literal
-Python scripts plus declarative templates and documentation. Cloning the
+The complete operational DNA is committed as a scaffold of 22 function-literal
+Python scripts/modules plus declarative templates and documentation. Cloning the
 repository and running `init_environment.py` bootstraps a working formation from
 zero. Optional brand-neutral `systemd/` templates bind a bounded queue worker to
 an exact active field-root mount, schedule it on persistent five-second calendar
@@ -114,6 +119,7 @@ formation is:
 | `state/ledger.jsonl` | SHA-256 state ledger | Append-only, durable |
 | `state/control_profile.json` | Active security profile | Runtime, durable |
 | `state/hierarchy.json` | Parent-child graph | Runtime, durable |
+| `state/continuations/` | Explicit intents, immutable checkpoints, and per-intent locks | Runtime, durable |
 | `tmp/` | Scratch space, `field_env.json` | Ephemeral |
 
 ## Agent Directives

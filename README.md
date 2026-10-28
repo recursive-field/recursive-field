@@ -91,7 +91,7 @@ KNOWLEDGE_DIR=state/knowledge/urban_ops     # Urban Operations intelligence
 
 ---
 
-## Script Inventory (19 Scripts / Modules)
+## Script Inventory (22 Scripts / Modules)
 
 | Script | Function |
 | --- | --- |
@@ -109,11 +109,14 @@ KNOWLEDGE_DIR=state/knowledge/urban_ops     # Urban Operations intelligence
 | `build_prompt_pipeline.py` | 5-layer prompt assembly with security-filtered inclusions |
 | `spawn_subordinate.py` | Parent-child hierarchy with security posture inheritance |
 | `rebalance.py` | Automated topology audit, hierarchy repair, scratch pruning |
-| `entrypoint.py` | Container boot: discovery to health to prompt to injection to activation |
+| `entrypoint.py` | Container boot: discovery to health to prompt projection to activation; optional fail-closed continuation handoff |
 | `delegate_task.py` | Capability-gated task delegation across mesh queues |
 | `consume_queue.py` | Bounded async worker with durable cursor, atomic claims, and allowlisted execution |
 | `continuation_schema.py` | Canonical JSON, embedded-hash validation, schema checks, and atomic continuation writes |
 | `resume_thread.py` | Read-only continuation eligibility classifier; only `--dry-run` is supported |
+| `checkpoint_intent.py` | Explicit arming plus immutable, lock-serialized checkpoint creation and CAS intent-head advancement |
+| `continuation_reflex.py` | Fail-closed, adapter-neutral continuation request/claim/receipt handoff; never starts a model turn |
+| `generate_continuation_fixtures.py` | Deterministic test-only fields spanning all seven continuation classifications |
 
 ### Bounded Asynchronous Delegation
 
@@ -143,17 +146,20 @@ Task payloads are never interpreted as shell commands.
 
 Continuation contracts are defined by
 `schemas/continuation-intent.schema.json` and
-`schemas/continuation-checkpoint.schema.json`. Runtime instances live under the
-ignored formation state tree at `state/continuations/{intents,checkpoints}/`.
+`schemas/continuation-checkpoint.schema.json`, and
+`schemas/continuation-reflex.schema.json`. Runtime instances live under the
+ignored formation state tree at `state/continuations/`.
 Artifacts bind canonical SHA-256 values to field genesis, opaque caller-supplied
 context identity, security posture, context evidence, checkpoint ancestry, lease
-state, and an explicit non-actuating effect boundary.
+state, interruption class, token-source economics, retry budget, a self-contained
+work/file/Git/subordinate snapshot, and an explicit non-actuating effect boundary.
 
 Step 2 provides classification only:
 
 ```bash
 python3 resume_thread.py <intent_uuid> --dry-run \
-  [--at 2026-01-01T00:05:00+00:00] [--start <field_path>]
+  [--at 2026-01-01T00:05:00+00:00] [--start <field_path>] \
+  [--current-token-source <source> --current-token-model capped|metered]
 ```
 
 The command emits one stable canonical JSON line and classifies the intent as
@@ -173,6 +179,72 @@ work, advance leases, append events, create results, start model turns, replay
 effects, or mutate any file. Repeated fixed-input dry-runs therefore preserve
 byte-identical runtime state.
 
+Step 3 adds formation-side recording without crossing the Engine boundary.
+Arming is explicit and requires caller-supplied opaque context identity, a
+history hash, timestamps, positive formation attestation, and required
+capabilities. It also snapshots interruption class, token source/model, bounded
+retry policy, work vector, file state, Git commit, subordinate context IDs, and
+parallel-job references:
+
+```bash
+python3 checkpoint_intent.py arm \
+  --intent-id <intent_uuid> --context-id <opaque_context_id> \
+  --history-sha256 <sha256> --observed-at <RFC3339> \
+  --created-at <RFC3339> --required-capability observe \
+  --attest-context-exists --interruption-class self_initiated \
+  --token-source <source> --token-model capped \
+  --maximum-retry-attempts 3 --work-vector <text> \
+  --git-commit <40-hex-commit> --start <field_path>
+```
+
+`checkpoint_intent.py checkpoint` requires an expected intent hash, explicit
+checkpoint UUID/time/state, and complete lease coordinates for `active` state.
+Checkpoint files are immutable create-only records; exact retries are
+idempotent, conflicting UUID reuse cannot overwrite, and the mutable intent
+head advances under a per-intent lock with compare-and-swap. Sequence-bearing
+ancestry, terminal locks, the `awaiting_human` authority barrier, current boot
+identity, lease attempt/generation/timestamps, exact effect-boundary equality,
+and consequential-dispatch reconciliation all fail closed. The recorder itself
+performs no dispatch, model turn, chat/API operation, service change, deployment,
+or external-effect replay.
+
+For externally interrupted work, a capped-to-metered token-model change—or an
+unavailable current token snapshot—classifies as `awaiting_human` (exit `11`).
+Retry exhaustion also requires and classifies as `awaiting_human`; this authority
+barrier is never auto-cleared.
+
+`entrypoint.py --continuation-intent-id <uuid>` can classify an explicitly armed
+intent and prepare one immutable `continuation_reflex` request. This is only a
+pre-runtime handoff: it does not import Agent Zero, inspect or mutate chats, send
+a user message, inject an in-memory system role, or start a model turn. The
+request requires an in-process trusted adapter to verify that the existing
+context is present and idle, claim one bounded attempt, inject the supplied
+system protocol for `maximum_new_turns=1`, and record an immutable
+`continuation_reflex_fired` receipt.
+
+Tracked installable source for the narrow Agent Zero user-plugin boundary lives
+at `agent_zero_plugins/continuation_reflex/`; `/a0/usr/plugins/continuation_reflex`
+is only an ignored runtime installation. The packaged adapter independently
+validates explicit request/intent/checkpoint/hash bindings, current context
+existence and idleness, retry and authority barriers, token drift, boot-bound
+leases, and prior claim/receipt evidence. It remains deliberately fail-closed:
+the current Agent Zero runtime has no trusted typed-system/protocol entrypoint
+that both avoids a user-history message and enforces exactly one model turn, so
+the plugin does not claim, inject, fire, or write a receipt. See
+`agent_zero_plugins/README.md` for stopped-runtime installation instructions.
+
+Deterministic classification fixtures are deliberately test-only and require a
+new explicit output root outside this live project:
+
+```bash
+python3 generate_continuation_fixtures.py \
+  --test-only --output-root /tmp/continuation-fixtures
+```
+
+The generated manifest fixes IDs, timestamps, hashes, and boot identity while
+covering `resumable`, `active`, `awaiting_human`, `terminal`,
+`needs_reconciliation`, `invalid`, and `unavailable`.
+
 ### Optional systemd scheduling
 
 [`systemd/`](systemd/) contains brand-neutral source templates for a hardened
@@ -182,7 +254,7 @@ Docker starts auto-restarted bind-mounted containers. A missing mount cannot
 silently fall back to the root-disk directory. See
 [`systemd/README.md`](systemd/README.md) for substitutions, validation,
 installation, recovery, and rollback. These unit templates do not change the
-19-script/module inventory.
+22-script/module inventory.
 
 ---
 
