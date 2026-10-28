@@ -9,7 +9,7 @@ The runtime tree is ignored Agent Zero user state and is not part of this reposi
 
 ## Continuation Reflex
 
-`continuation_reflex/` packages the fail-closed continuation adapter. Its current implementation validates explicit formation handoffs but deliberately does not claim or fire them because the current Agent Zero runtime has no native typed-system/protocol, exactly-one-model-turn entrypoint that avoids creating a user-history message.
+`continuation_reflex/` packages the authenticated bridge from immutable formation handoffs to Agent Zero's native `AgentContext.continuation_turn()` primitive. The HTTP route accepts only a request ID, validates the bound formation evidence, creates a separate formation claim, and delegates one typed system turn to the engine without a user-history message or normal monologue-loop entry.
 
 ### Install or update later
 
@@ -25,4 +25,4 @@ find /a0/usr/plugins/continuation_reflex -type d -name __pycache__ -prune -exec 
 
 Alternatively, archive the **contents** of `agent_zero_plugins/continuation_reflex/` at the ZIP root and install it through Agent Zero's plugin manager. The package has no dependencies or external services; lifecycle hooks are idempotent no-ops.
 
-The default configuration remains inert (`enabled: false`). Enabling it before the missing framework entrypoint exists only performs read-only inspection and reports the blocked boundary; it does not start a turn.
+The default configuration remains inert (`enabled: false`). Installation and activation are explicit operational steps. When enabled against a compatible local Agent Zero checkout, the periodic extension remains inspection-only; dispatch occurs only through the authenticated, CSRF-protected `POST /api/plugins/continuation_reflex/continuation_turn` route.

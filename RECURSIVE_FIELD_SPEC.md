@@ -414,12 +414,17 @@ The repository-owned installable Agent Zero package is
 is an ignored runtime copy, not the commit boundary. The plugin validates
 requests, immutable intent/checkpoint/hash bindings, strict existing-context
 lookup, context idleness, retry and `awaiting_human` barriers, external token
-drift, old-boot leases, and existing claim/receipt evidence. It remains inert
-because the current framework has no native typed-system/protocol,
-one-model-turn entrypoint that avoids user-history insertion. It neither claims,
-injects, dispatches, nor records a fired receipt until that framework boundary
-exists. Installation is an explicit stopped-runtime copy or normal plugin-manager
-operation, as documented in `agent_zero_plugins/README.md`.
+drift, old-boot leases, and existing claim/receipt evidence. Its authenticated,
+CSRF-protected POST route accepts only a request ID, creates or replays a
+formation-owned claim, and invokes the framework-owned
+`AgentContext.continuation_turn()` primitive in process. The engine separately
+reserves durable idempotency evidence before one tool-disabled model call,
+projects the validated protocol as system material without a `UserMessage` or
+normal monologue-loop entry, and records terminal or ambiguous engine evidence.
+Only completed engine evidence permits the plugin to publish the separate
+`continuation_reflex_fired` receipt. Installation is an explicit stopped-runtime
+copy or normal plugin-manager operation, as documented in
+`agent_zero_plugins/README.md`.
 
 ### 6.5 Optional systemd queue scheduling
 
@@ -601,7 +606,7 @@ The resolver uses `KEY = VALUE` pairs to promote knowledge bindings above the st
 | 18 | `delegate_task.py` | 0/4 | Delegation + queue events + bi-directional logs + lockdown gate (exit 4) |
 | 19 | `consume_queue.py` | 0/3/4/5 | Once-only execution + replay/tamper/lockdown handling + persisted result |
 | 20 | `checkpoint_intent.py` | 0/3/4/5 | Explicit arm/checkpoint recording, immutable checkpoint publish, locked CAS head update |
-| 21 | `continuation_reflex.py` | N/A | Fail-closed request/claim/fired-receipt handoff for a future trusted in-process adapter |
+| 21 | `continuation_reflex.py` | N/A | Formation-owned request/claim/fired-receipt handoff consumed by the authenticated typed-turn plugin bridge |
 | 22 | `generate_continuation_fixtures.py` | 0/2 | Test-only deterministic fixtures for all seven classifications |
 
 ### 11.3 Portability Proof
@@ -647,13 +652,14 @@ The resolver uses `KEY = VALUE` pairs to promote knowledge bindings above the st
 │   └── continuation-reflex.schema.json
 ├── agent_zero_plugins/         # Tracked installable plugin packages (not formation scripts)
 │   ├── README.md               # Packaging/install boundary
-│   └── continuation_reflex/    # Fail-closed Agent Zero user-plugin source
+│   └── continuation_reflex/    # Authenticated typed-turn bridge plugin source
 │       ├── plugin.yaml
 │       ├── default_config.yaml
 │       ├── hooks.py
+│       ├── api/continuation_turn.py
 │       ├── helpers/runtime.py
 │       ├── extensions/python/job_loop/_50_continuation_reflex.py
-│       └── tests/test_runtime.py
+│       └── tests/{test_runtime.py,test_api.py}
 ├── systemd/                    # Optional rendered host scheduler (not scripts)
 │   ├── docker.service.d/
 │   │   └── field-root.conf.in  # Docker exact-mount prerequisite drop-in
@@ -758,7 +764,7 @@ state/
 | `continuation_schema.py` | Imported formation library | N/A | Standard library; checked-in schemas |
 | `resume_thread.py` | `python3 resume_thread.py <intent_uuid> --dry-run [--at <ISO-8601>] [--boot-id <uuid>] [--current-token-source <source> --current-token-model capped|metered] [--start <path>]` | 0 resumable · 10 active · 11 human · 12 terminal · 20 reconcile · 30 invalid · 40 unavailable | `find_root`, `continuation_schema` |
 | `checkpoint_intent.py` | `python3 checkpoint_intent.py arm ...` or `python3 checkpoint_intent.py checkpoint <intent_uuid> ...` | 0 recorded/idempotent · 3 invalid · 4 conflict · 5 unavailable | `find_root`, `continuation_schema`, `resume_thread` validation helpers |
-| `continuation_reflex.py` | Imported formation handoff library | N/A | `continuation_schema`, `resume_thread`; trusted Agent Zero adapter intentionally blocked on missing native entrypoint |
+| `continuation_reflex.py` | Imported formation handoff library | N/A | `continuation_schema`, `resume_thread`; consumed by the authenticated plugin bridge, while engine dispatch remains owned by `AgentContext.continuation_turn()` |
 | `generate_continuation_fixtures.py` | `python3 generate_continuation_fixtures.py --test-only --output-root <new-path>` | 0 generated · 2 refused/invalid | `continuation_schema` |
 
 ---

@@ -115,7 +115,7 @@ KNOWLEDGE_DIR=state/knowledge/urban_ops     # Urban Operations intelligence
 | `continuation_schema.py` | Canonical JSON, embedded-hash validation, schema checks, and atomic continuation writes |
 | `resume_thread.py` | Read-only continuation eligibility classifier; only `--dry-run` is supported |
 | `checkpoint_intent.py` | Explicit arming plus immutable, lock-serialized checkpoint creation and CAS intent-head advancement |
-| `continuation_reflex.py` | Fail-closed, adapter-neutral continuation request/claim/receipt handoff; never starts a model turn |
+| `continuation_reflex.py` | Formation-owned immutable continuation request/claim/receipt handoff; engine actuation occurs only through the authenticated typed-turn plugin bridge |
 | `generate_continuation_fixtures.py` | Deterministic test-only fields spanning all seven continuation classifications |
 
 ### Bounded Asynchronous Delegation
@@ -227,11 +227,14 @@ at `agent_zero_plugins/continuation_reflex/`; `/a0/usr/plugins/continuation_refl
 is only an ignored runtime installation. The packaged adapter independently
 validates explicit request/intent/checkpoint/hash bindings, current context
 existence and idleness, retry and authority barriers, token drift, boot-bound
-leases, and prior claim/receipt evidence. It remains deliberately fail-closed:
-the current Agent Zero runtime has no trusted typed-system/protocol entrypoint
-that both avoids a user-history message and enforces exactly one model turn, so
-the plugin does not claim, inject, fire, or write a receipt. See
-`agent_zero_plugins/README.md` for stopped-runtime installation instructions.
+leases, and prior claim/receipt evidence. Its authenticated, CSRF-protected API
+accepts only an immutable request ID, writes a separate formation claim, and
+calls Agent Zero's native `AgentContext.continuation_turn()` primitive. The
+engine reserves its own durable receipt before exactly one tool-disabled model
+invocation, projects only validated system protocol, never creates a user
+message or enters `communicate()`/`monologue()`, and fail-closes ambiguous or
+stale completion. See `agent_zero_plugins/README.md` for stopped-runtime
+installation instructions.
 
 Deterministic classification fixtures are deliberately test-only and require a
 new explicit output root outside this live project:

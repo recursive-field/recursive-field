@@ -10,6 +10,7 @@ import tempfile
 import unittest
 import uuid
 from pathlib import Path
+from unittest.mock import patch
 
 PROJECT_ROOT = Path(
     os.environ.get("RECURSIVE_FIELD_PROJECT_ROOT", "/a0/usr/projects/recursive-field")
@@ -107,7 +108,7 @@ class ContinuationReflexPluginTest(unittest.TestCase):
         path.write_bytes(canonical_json_bytes(request) + b"\n")
         return path
 
-    def test_valid_request_stops_before_claim_or_turn(self) -> None:
+    def test_valid_request_is_ready_without_scan_side_effects(self) -> None:
         request, path = self._request()
         result = runtime.inspect_request(
             self.root,
@@ -118,8 +119,8 @@ class ContinuationReflexPluginTest(unittest.TestCase):
             if context_id == self.context_id
             else None,
         )
-        self.assertEqual(result.disposition, "blocked")
-        self.assertEqual(result.reasons, (runtime.RUNTIME_TRIGGER_BLOCK,))
+        self.assertEqual(result.disposition, "ready")
+        self.assertEqual(result.reasons, ())
         self.assertFalse(
             (self.root / "state/continuations/reflex/claims" / request["request_id"]).exists()
         )
@@ -283,6 +284,218 @@ class ContinuationReflexPluginTest(unittest.TestCase):
         )
         self.assertEqual(fired.disposition, "already_fired")
         self.assertEqual(fired.reasons, ("receipt_exists",))
+
+    def test_prepare_dispatch_claims_and_builds_closed_engine_request(self) -> None:
+        request, _ = self._request()
+        config = {
+            "enabled": True,
+            "field_root": str(self.root),
+            "current_token_source": "test-capped-plan",
+            "current_token_model": "capped",
+            "adapter_instance": "test-api",
+        }
+        now = __import__("datetime").datetime.fromisoformat(
+            "2026-01-01T00:11:00+00:00"
+        )
+        with patch.object(runtime, "_read_boot_id", return_value=BOOT_ID), patch.object(
+            runtime, "_utc_now", return_value=now
+        ):
+            plan = runtime.prepare_dispatch(
+                config,
+                request["request_id"],
+                context_lookup=lambda value: FakeContext(False)
+                if value == self.context_id
+                else None,
+            )
+            replay = runtime.prepare_dispatch(
+                config,
+                request["request_id"],
+                context_lookup=lambda _value: FakeContext(False),
+            )
+
+        self.assertEqual(plan.claim_disposition, "created")
+        self.assertEqual(replay.claim_disposition, "exists_identical")
+        self.assertEqual(plan.claim, replay.claim)
+
+        # An authenticated retry can reach the engine while the same claimed
+        # continuation is active; the engine owns 202 in-progress replay and
+        # distinguishes unrelated running work under its activity lock.
+        with patch.object(runtime, "_read_boot_id", return_value=BOOT_ID), patch.object(
+            runtime, "_utc_now", return_value=now
+        ):
+            active_replay = runtime.prepare_dispatch(
+                config,
+                request["request_id"],
+                context_lookup=lambda _value: FakeContext(True),
+            )
+        self.assertEqual(active_replay.claim_disposition, "exists_identical")
+        self.assertEqual(active_replay.claim, plan.claim)
+        self.assertEqual(set(plan.engine_request), {
+            "schema_version",
+            "request_id",
+            "context_id",
+            "generation",
+            "formation_reflex_sha256",
+            "system_protocol",
+        })
+        self.assertEqual(plan.engine_request["request_id"], request["request_id"])
+        self.assertEqual(plan.engine_request["formation_reflex_sha256"], request["reflex_sha256"])
+        self.assertEqual(plan.engine_request["system_protocol"]["role"], "system")
+        self.assertIs(plan.engine_request["system_protocol"]["user_message_sent"], False)
+
+    def test_record_fired_is_separate_and_idempotent(self) -> None:
+        request, _ = self._request()
+        config = {
+            "enabled": True,
+            "field_root": str(self.root),
+            "current_token_source": "test-capped-plan",
+            "current_token_model": "capped",
+        }
+        now = __import__("datetime").datetime.fromisoformat(
+            "2026-01-01T00:11:00+00:00"
+        )
+        with patch.object(runtime, "_read_boot_id", return_value=BOOT_ID), patch.object(
+            runtime, "_utc_now", return_value=now
+        ):
+            plan = runtime.prepare_dispatch(
+                config,
+                request["request_id"],
+                context_lookup=lambda _value: FakeContext(False),
+            )
+            engine_result = {
+                "request_id": request["request_id"],
+                "context_id": self.context_id,
+                "generation": 1,
+                "state": "completed",
+                "terminal": True,
+                "disposition": "completed",
+                "receipt": {
+                    "request_id": request["request_id"],
+                    "context_id": self.context_id,
+                    "generation": 1,
+                    "state": "completed",
+                    "terminal": True,
+                    "formation_reflex_sha256": request["reflex_sha256"],
+                    "protocol_text_sha256": request["system_protocol"]["text_sha256"],
+                },
+            }
+            fired, disposition = runtime.record_fired(plan, engine_result)
+            replay, replay_disposition = runtime.record_fired(plan, engine_result)
+            prepared = runtime.prepare_dispatch(
+                config,
+                request["request_id"],
+                context_lookup=lambda _value: FakeContext(False),
+            )
+
+        self.assertEqual(disposition, "created")
+        self.assertEqual(replay_disposition, "exists_identical")
+        self.assertEqual(replay, fired)
+        self.assertEqual(fired["event_type"], "continuation_reflex_fired")
+        self.assertEqual(fired["fired"]["injection_role"], "system")
+        self.assertIs(fired["fired"]["user_message_sent"], False)
+        self.assertEqual(prepared.existing_fired, fired)
+        self.assertIsNone(prepared.claim)
+
+    def test_record_fired_requires_exact_terminal_engine_evidence(self) -> None:
+        request, _ = self._request()
+        config = {
+            "enabled": True,
+            "field_root": str(self.root),
+            "current_token_source": "test-capped-plan",
+            "current_token_model": "capped",
+        }
+        with patch.object(runtime, "_read_boot_id", return_value=BOOT_ID):
+            plan = runtime.prepare_dispatch(
+                config,
+                request["request_id"],
+                context_lookup=lambda _value: FakeContext(False),
+            )
+        base = {
+            "request_id": request["request_id"],
+            "context_id": self.context_id,
+            "generation": 1,
+            "state": "completed",
+            "terminal": True,
+            "disposition": "completed",
+            "receipt": {
+                "request_id": request["request_id"],
+                "context_id": self.context_id,
+                "generation": 1,
+                "state": "completed",
+                "terminal": True,
+                "formation_reflex_sha256": request["reflex_sha256"],
+                "protocol_text_sha256": request["system_protocol"]["text_sha256"],
+            },
+        }
+        for mutate, reason in (
+            (lambda value: value.update(terminal=False), "engine_turn_not_completed"),
+            (lambda value: value.update(generation=2), "engine_receipt_request_binding_mismatch"),
+            (
+                lambda value: value["receipt"].update(
+                    formation_reflex_sha256="f" * 64
+                ),
+                "engine_receipt_evidence_mismatch",
+            ),
+        ):
+            candidate = json.loads(json.dumps(base))
+            mutate(candidate)
+            with self.subTest(reason=reason), self.assertRaisesRegex(
+                runtime.ReflexConflictError, reason
+            ):
+                runtime.record_fired(plan, candidate)
+
+    def test_existing_claim_from_old_boot_is_conflict(self) -> None:
+        request, _ = self._request()
+        config = {
+            "enabled": True,
+            "field_root": str(self.root),
+            "current_token_source": "test-capped-plan",
+            "current_token_model": "capped",
+        }
+        now = __import__("datetime").datetime.fromisoformat(
+            "2026-01-01T00:11:00+00:00"
+        )
+        with patch.object(runtime, "_read_boot_id", return_value=BOOT_ID), patch.object(
+            runtime, "_utc_now", return_value=now
+        ):
+            runtime.prepare_dispatch(
+                config,
+                request["request_id"],
+                context_lookup=lambda _value: FakeContext(False),
+            )
+        with patch.object(
+            runtime,
+            "_read_boot_id",
+            return_value="22222222-2222-4222-8222-222222222222",
+        ), patch.object(runtime, "_utc_now", return_value=now):
+            with self.assertRaisesRegex(
+                runtime.ReflexConflictError, "old_boot"
+            ):
+                runtime.prepare_dispatch(
+                    config,
+                    request["request_id"],
+                    context_lookup=lambda _value: FakeContext(False),
+                )
+
+    def test_prepare_dispatch_requires_existing_idle_context(self) -> None:
+        request, _ = self._request()
+        config = {
+            "enabled": True,
+            "field_root": str(self.root),
+            "current_token_source": "test-capped-plan",
+            "current_token_model": "capped",
+        }
+        with self.assertRaises(runtime.ReflexNotFoundError):
+            runtime.prepare_dispatch(config, request["request_id"], context_lookup=lambda _: None)
+        with self.assertRaises(runtime.ReflexConflictError):
+            runtime.prepare_dispatch(
+                config,
+                request["request_id"],
+                context_lookup=lambda _: FakeContext(True),
+            )
+        self.assertFalse(
+            (self.root / "state/continuations/reflex/claims" / request["request_id"]).exists()
+        )
 
     def test_disabled_scan_is_inert(self) -> None:
         self._request()

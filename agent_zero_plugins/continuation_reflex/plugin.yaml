@@ -1,7 +1,7 @@
 name: continuation_reflex
 title: Continuation Reflex
-description: Fail-closed local adapter for Recursive Field continuation handoffs.
-version: 0.1.0
+description: Authenticated bridge from immutable Recursive Field handoffs to native typed continuation turns.
+version: 0.2.0
 settings_sections: []
 per_project_config: false
 per_agent_config: false

@@ -35,7 +35,7 @@ When `KNOWLEDGE_DIR=state/knowledge/recursive_field`, the formation's assembled 
 | `continuation_schema.py` | Formation-owned continuation constructors and strict schema/hash/transition/lease/effect-boundary validation with atomic and immutable writes |
 | `resume_thread.py` | Read-only seven-way continuation classifier with sequence, boot identity, security, evidence, and reconciliation checks |
 | `checkpoint_intent.py` | Explicit arming and immutable checkpoint recording with per-intent locking and compare-and-swap head advancement |
-| `continuation_reflex.py` | Fail-closed formation handoff: immutable system-protocol request, claim, and `continuation_reflex_fired` receipt contracts without direct Engine actuation |
+| `continuation_reflex.py` | Formation-owned immutable system-protocol request, claim, and `continuation_reflex_fired` contracts; authenticated plugin dispatch delegates to the engine-owned typed continuation primitive |
 | `generate_continuation_fixtures.py` | Deterministic test-only isolated fields spanning all seven continuation classifications |
 
 ## Three-Layer Architecture

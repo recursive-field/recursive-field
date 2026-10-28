@@ -1,22 +1,24 @@
-"""Fail-closed runtime boundary for continuation reflex handoffs.
+"""Formation validation and audit boundary for native continuation turns.
 
-Current Agent Zero exposes ``AgentContext.communicate(UserMessage(...))`` as the
-supported way to start work.  Even an empty ``UserMessage`` with
-``system_message`` is persisted through ``hist_add_user_message`` as a user-side
-history record, and ``Agent.monologue`` is not natively bounded to one model
-turn.  The requested adapter must do neither, so this plugin deliberately stops
-before claim or dispatch until Agent Zero provides a trusted typed-protocol,
-one-turn entrypoint.
+The API adapter accepts only an immutable request identifier. This module
+resolves and validates the hash-bound formation artifacts, claims the request,
+and builds the narrow engine request consumed by
+``AgentContext.continuation_turn``. It never creates a ``UserMessage`` or enters
+the normal monologue loop.
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
+import os
 import stat
+import tempfile
 import threading
 import time
+import uuid
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -27,8 +29,6 @@ CHECKPOINT_RELATIVE = Path("state/continuations/checkpoints")
 RECEIPT_RELATIVE = Path("state/continuations/reflex/receipts")
 CLAIM_RELATIVE = Path("state/continuations/reflex/claims")
 TERMINAL_STATES = frozenset({"completed", "cancelled", "blocked", "failed"})
-RUNTIME_TRIGGER_SUPPORTED = False
-RUNTIME_TRIGGER_BLOCK = "runtime_typed_protocol_one_turn_unsupported"
 
 _SCAN_LOCK = threading.Lock()
 _LAST_SCAN_AT = 0.0
@@ -37,6 +37,14 @@ _LAST_RESULTS: tuple["Inspection", ...] = ()
 
 class ReflexValidationError(ValueError):
     """A continuation artifact is malformed, unsafe, or inconsistent."""
+
+
+class ReflexNotFoundError(ReflexValidationError):
+    """A configured field artifact or existing Agent Zero context is absent."""
+
+
+class ReflexConflictError(ReflexValidationError):
+    """Validated evidence currently forbids or conflicts with dispatch."""
 
 
 @dataclass(frozen=True)
@@ -55,6 +63,17 @@ class Inspection:
             "disposition": self.disposition,
             "reasons": list(self.reasons),
         }
+
+
+@dataclass(frozen=True)
+class DispatchPlan:
+    root: Path
+    request: dict[str, Any]
+    context: Any
+    engine_request: dict[str, Any]
+    claim: dict[str, Any] | None
+    claim_disposition: str
+    existing_fired: dict[str, Any] | None = None
 
 
 def canonical_bytes(value: Any) -> bytes:
@@ -114,6 +133,193 @@ def _read_boot_id() -> str | None:
     except OSError:
         return None
     return value if _canonical_uuid(value) else None
+
+
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _timestamp(value: datetime) -> str:
+    return value.isoformat().replace("+00:00", "Z")
+
+
+def _parse_timestamp(value: Any, field: str) -> datetime:
+    if not isinstance(value, str) or not value:
+        raise ReflexValidationError(f"{field} is invalid")
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ReflexValidationError(f"{field} is invalid") from exc
+    if parsed.tzinfo is None:
+        raise ReflexValidationError(f"{field} must include a timezone")
+    return parsed.astimezone(timezone.utc)
+
+
+def _seal_reflex(document: Mapping[str, Any]) -> dict[str, Any]:
+    sealed = dict(document)
+    sealed.pop("reflex_sha256", None)
+    sealed["reflex_sha256"] = hashlib.sha256(canonical_bytes(sealed)).hexdigest()
+    return sealed
+
+
+def _write_atomic(path: Path, document: Mapping[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = canonical_bytes(document) + b"\n"
+    descriptor, temporary = tempfile.mkstemp(
+        prefix=f".{path.name}.", suffix=".tmp", dir=path.parent
+    )
+    try:
+        with os.fdopen(descriptor, "wb") as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+        directory_descriptor = os.open(path.parent, os.O_RDONLY)
+        try:
+            os.fsync(directory_descriptor)
+        finally:
+            os.close(directory_descriptor)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+
+
+def _create_immutable(path: Path, document: Mapping[str, Any]) -> str:
+    payload = canonical_bytes(document) + b"\n"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError:
+        try:
+            existing = path.read_bytes()
+        except OSError as exc:
+            raise ReflexConflictError(f"cannot read existing artifact: {path}") from exc
+        if existing == payload:
+            return "exists_identical"
+        raise ReflexConflictError(f"immutable artifact conflict: {path}")
+    try:
+        with os.fdopen(descriptor, "wb") as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        directory_descriptor = os.open(path.parent, os.O_RDONLY)
+        try:
+            os.fsync(directory_descriptor)
+        finally:
+            os.close(directory_descriptor)
+    except BaseException:
+        try:
+            path.unlink()
+        except OSError:
+            pass
+        raise
+    return "created"
+
+
+def _validate_derived_binding(
+    request: Mapping[str, Any], document: Mapping[str, Any], stage: str
+) -> None:
+    if embedded_hash(document, "reflex_sha256") != document.get("reflex_sha256"):
+        raise ReflexConflictError(f"existing {stage} reflex_sha256 mismatch")
+    mutable = {
+        "stage",
+        "event_type",
+        "recorded_at",
+        "claim",
+        "fired",
+        "reflex_sha256",
+    }
+    for field, expected in request.items():
+        if field not in mutable and document.get(field) != expected:
+            raise ReflexConflictError(f"existing {stage} request binding mismatch")
+    if document.get("request_id") != request.get("request_id"):
+        raise ReflexConflictError(f"existing {stage} request_id mismatch")
+
+
+def _validate_claim(
+    request: Mapping[str, Any], document: Mapping[str, Any], *, current_boot_id: str
+) -> dict[str, Any]:
+    _validate_derived_binding(request, document, "claim")
+    if (
+        document.get("stage") != "claim"
+        or document.get("event_type") is not None
+        or document.get("fired") is not None
+    ):
+        raise ReflexConflictError("existing claim stage is invalid")
+    claim = document.get("claim")
+    required = {
+        "claim_id",
+        "attempt",
+        "adapter_instance",
+        "boot_id",
+        "claimed_at",
+        "expires_at",
+        "context_exists",
+        "context_was_running",
+    }
+    if not isinstance(claim, dict) or set(claim) != required:
+        raise ReflexConflictError("existing claim payload is invalid")
+    _maximum, used = _validate_retry(request.get("retry_budget"))
+    if (
+        not _canonical_uuid(claim.get("claim_id"))
+        or claim.get("attempt") != used + 1
+        or claim.get("context_exists") is not True
+        or claim.get("context_was_running") is not False
+    ):
+        raise ReflexConflictError("existing claim authority binding is invalid")
+    if claim.get("boot_id") != current_boot_id:
+        raise ReflexConflictError("existing_claim_from_old_boot")
+    claimed_at = _parse_timestamp(claim.get("claimed_at"), "claimed_at")
+    expires_at = _parse_timestamp(claim.get("expires_at"), "expires_at")
+    if expires_at <= claimed_at:
+        raise ReflexConflictError("existing claim expiry is invalid")
+    if expires_at <= _utc_now():
+        raise ReflexConflictError("existing_claim_expired")
+    return dict(document)
+
+
+def _validate_fired(
+    request: Mapping[str, Any], document: Mapping[str, Any]
+) -> dict[str, Any]:
+    _validate_derived_binding(request, document, "fired receipt")
+    if (
+        document.get("stage") != "fired"
+        or document.get("event_type") != "continuation_reflex_fired"
+    ):
+        raise ReflexConflictError("existing fired receipt stage is invalid")
+    claim = document.get("claim")
+    fired = document.get("fired")
+    required = {
+        "receipt_id",
+        "claim_id",
+        "turn_id",
+        "fired_at",
+        "injection_role",
+        "maximum_new_turns",
+        "user_message_sent",
+        "context_exists",
+        "context_was_running",
+    }
+    if (
+        not isinstance(claim, dict)
+        or not isinstance(fired, dict)
+        or set(fired) != required
+    ):
+        raise ReflexConflictError("existing fired receipt payload is invalid")
+    if (
+        not _canonical_uuid(fired.get("receipt_id"))
+        or fired.get("claim_id") != claim.get("claim_id")
+        or fired.get("injection_role") != "system"
+        or fired.get("maximum_new_turns") != 1
+        or fired.get("user_message_sent") is not False
+        or fired.get("context_exists") is not True
+        or fired.get("context_was_running") is not False
+    ):
+        raise ReflexConflictError(
+            "existing fired receipt authority binding is invalid"
+        )
+    _parse_timestamp(fired.get("fired_at"), "fired_at")
+    return dict(document)
 
 
 def _validate_retry(value: Any) -> tuple[int, int]:
@@ -301,11 +507,240 @@ def inspect_request(
             return Inspection(request_id, intent_id, context_id, "blocked", ("existing_context_not_found",))
         if context.is_running():
             return Inspection(request_id, intent_id, context_id, "blocked", ("context_already_running",))
-        if not RUNTIME_TRIGGER_SUPPORTED:
-            return Inspection(request_id, intent_id, context_id, "blocked", (RUNTIME_TRIGGER_BLOCK,))
-        raise ReflexValidationError("runtime support flag set without an adapter implementation")
+        return Inspection(request_id, intent_id, context_id, "ready", ())
     except (OSError, ReflexValidationError) as exc:
         return Inspection(request_id, intent_id, context_id, "invalid", (str(exc),))
+
+
+def _resolve_field_root(config: Mapping[str, Any]) -> Path:
+    if config.get("enabled") is not True:
+        raise ReflexConflictError("plugin_disabled")
+    configured = str(config.get("field_root") or "").strip()
+    if not configured:
+        raise ReflexValidationError("field_root_not_configured")
+    try:
+        return Path(configured).resolve(strict=True)
+    except OSError as exc:
+        raise ReflexNotFoundError("field_root_unavailable") from exc
+
+
+def _engine_generation(request: Mapping[str, Any]) -> int:
+    pointer = request.get("checkpoint")
+    if pointer is None:
+        return 1
+    sequence = pointer.get("sequence") if isinstance(pointer, dict) else None
+    if type(sequence) is not int or sequence < 1:
+        raise ReflexValidationError("checkpoint sequence is invalid")
+    return sequence
+
+
+def _engine_request(request: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "schema_version": "1.0.0",
+        "request_id": request["request_id"],
+        "context_id": request["context_id"],
+        "generation": _engine_generation(request),
+        "formation_reflex_sha256": request["reflex_sha256"],
+        "system_protocol": dict(request["system_protocol"]),
+    }
+
+
+def _claim_document(request: Mapping[str, Any], config: Mapping[str, Any]) -> dict[str, Any]:
+    maximum, used = _validate_retry(request["retry_budget"])
+    attempt = used + 1
+    if attempt > maximum:
+        raise ReflexConflictError("retry_budget_exhausted")
+    boot_id = _read_boot_id()
+    if boot_id is None:
+        raise ReflexConflictError("current_boot_id_unavailable")
+    now = _utc_now()
+    claim = dict(request)
+    claim.update(
+        stage="claim",
+        recorded_at=_timestamp(now),
+        claim={
+            "claim_id": str(
+                uuid.uuid5(
+                    uuid.UUID(request["request_id"]),
+                    f"continuation-reflex-claim:{attempt}",
+                )
+            ),
+            "attempt": attempt,
+            "adapter_instance": str(
+                config.get("adapter_instance") or "continuation_reflex_api"
+            )[:256],
+            "boot_id": boot_id,
+            "claimed_at": _timestamp(now),
+            "expires_at": _timestamp(now + timedelta(minutes=5)),
+            "context_exists": True,
+            "context_was_running": False,
+        },
+    )
+    return _seal_reflex(claim)
+
+
+def _fired_document(
+    claim: Mapping[str, Any], engine_result: Mapping[str, Any]
+) -> dict[str, Any]:
+    now = _utc_now()
+    fired = dict(claim)
+    fired.update(
+        stage="fired",
+        event_type="continuation_reflex_fired",
+        recorded_at=_timestamp(now),
+        fired={
+            "receipt_id": str(
+                uuid.uuid5(
+                    uuid.UUID(claim["request_id"]),
+                    "continuation-reflex-fired",
+                )
+            ),
+            "claim_id": claim["claim"]["claim_id"],
+            "turn_id": f"{engine_result['request_id']}:{engine_result['generation']}",
+            "fired_at": _timestamp(now),
+            "injection_role": "system",
+            "maximum_new_turns": 1,
+            "user_message_sent": False,
+            "context_exists": True,
+            "context_was_running": False,
+        },
+    )
+    return _seal_reflex(fired)
+
+
+def prepare_dispatch(
+    config: Mapping[str, Any],
+    request_id: str,
+    *,
+    context_lookup=None,
+) -> DispatchPlan:
+    """Formation-prevalidate and immutably claim one API dispatch."""
+    if not _canonical_uuid(request_id):
+        raise ReflexValidationError("request_id is not a canonical UUID")
+    root = _resolve_field_root(config)
+    request_path = root / REQUEST_RELATIVE / f"{request_id}.json"
+    if not request_path.is_file():
+        raise ReflexNotFoundError("continuation_request_not_found")
+    request = validate_request(_read_json(root, request_path))
+    if request["request_id"] != request_id or request_path.stem != request_id:
+        raise ReflexValidationError("request filename binding mismatch")
+    _validate_intent_binding(
+        root,
+        request,
+        current_token_source=str(config.get("current_token_source") or ""),
+        current_token_model=str(config.get("current_token_model") or ""),
+    )
+    if context_lookup is None:
+        from agent import AgentContext
+
+        context_lookup = AgentContext.get
+    context = context_lookup(request["context_id"])
+    if context is None:
+        raise ReflexNotFoundError("existing_context_not_found")
+
+    # Durable terminal evidence is replayable regardless of later context
+    # activity; no new engine work occurs on this path.
+    receipt_path = root / RECEIPT_RELATIVE / f"{request_id}.json"
+    if receipt_path.exists():
+        existing_fired = _validate_fired(
+            request,
+            _read_json(root, receipt_path),
+        )
+        return DispatchPlan(
+            root=root,
+            request=request,
+            context=context,
+            engine_request=_engine_request(request),
+            claim=None,
+            claim_disposition="not_required_already_fired",
+            existing_fired=existing_fired,
+        )
+
+    boot_id = _read_boot_id()
+    if boot_id is None:
+        raise ReflexConflictError("current_boot_id_unavailable")
+    _maximum, used = _validate_retry(request["retry_budget"])
+    attempt = used + 1
+    claim_path = root / CLAIM_RELATIVE / request_id / f"{attempt}.json"
+    if claim_path.exists():
+        # An identical claim may be retried while its own native turn is active.
+        # Let the engine distinguish same-request in-progress replay from an
+        # unrelated running task or a conflicting continuation.
+        claim = _validate_claim(
+            request,
+            _read_json(root, claim_path),
+            current_boot_id=boot_id,
+        )
+        claim_disposition = "exists_identical"
+    else:
+        # Initial dispatch is formation-gated on an idle context. The engine
+        # repeats this check under its activity lock after the durable claim.
+        if context.is_running():
+            raise ReflexConflictError("context_already_running")
+        claim = _claim_document(request, config)
+        try:
+            claim_disposition = _create_immutable(claim_path, claim)
+        except ReflexConflictError:
+            # A concurrent authenticated request may have won O_EXCL. Re-read
+            # and accept only the exact authority binding for this request.
+            claim = _validate_claim(
+                request,
+                _read_json(root, claim_path),
+                current_boot_id=boot_id,
+            )
+            claim_disposition = "exists_identical"
+    return DispatchPlan(
+        root=root,
+        request=request,
+        context=context,
+        engine_request=_engine_request(request),
+        claim=claim,
+        claim_disposition=claim_disposition,
+        existing_fired=None,
+    )
+
+
+def record_fired(
+    plan: DispatchPlan, engine_result: Mapping[str, Any]
+) -> tuple[dict[str, Any], str]:
+    """Write the formation-owned fired audit only for bound engine completion."""
+    if (
+        engine_result.get("state") != "completed"
+        or engine_result.get("terminal") is not True
+    ):
+        raise ReflexConflictError("engine_turn_not_completed")
+    expected = plan.engine_request
+    if (
+        engine_result.get("request_id") != expected["request_id"]
+        or engine_result.get("context_id") != expected["context_id"]
+        or engine_result.get("generation") != expected["generation"]
+    ):
+        raise ReflexConflictError("engine_receipt_request_binding_mismatch")
+    engine_receipt = engine_result.get("receipt")
+    if not isinstance(engine_receipt, Mapping) or (
+        engine_receipt.get("request_id") != expected["request_id"]
+        or engine_receipt.get("context_id") != expected["context_id"]
+        or engine_receipt.get("generation") != expected["generation"]
+        or engine_receipt.get("state") != "completed"
+        or engine_receipt.get("terminal") is not True
+        or engine_receipt.get("formation_reflex_sha256")
+        != expected["formation_reflex_sha256"]
+        or engine_receipt.get("protocol_text_sha256")
+        != expected["system_protocol"]["text_sha256"]
+    ):
+        raise ReflexConflictError("engine_receipt_evidence_mismatch")
+    if plan.claim is None:
+        raise ReflexConflictError("formation_claim_missing")
+    path = plan.root / RECEIPT_RELATIVE / f"{plan.request['request_id']}.json"
+    if path.exists():
+        existing = _validate_fired(plan.request, _read_json(plan.root, path))
+        return existing, "exists_identical"
+    fired = _fired_document(plan.claim, engine_result)
+    try:
+        return fired, _create_immutable(path, fired)
+    except ReflexConflictError:
+        existing = _validate_fired(plan.request, _read_json(plan.root, path))
+        return existing, "exists_identical"
 
 
 def scan_once(config: Mapping[str, Any], *, force: bool = False) -> tuple[Inspection, ...]:
