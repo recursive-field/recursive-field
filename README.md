@@ -91,7 +91,7 @@ KNOWLEDGE_DIR=state/knowledge/urban_ops     # Urban Operations intelligence
 
 ---
 
-## Script Inventory (22 Scripts / Modules)
+## Script Inventory (23 Scripts / Modules)
 
 | Script | Function |
 | --- | --- |
@@ -113,6 +113,7 @@ KNOWLEDGE_DIR=state/knowledge/urban_ops     # Urban Operations intelligence
 | `delegate_task.py` | Capability-gated task delegation across mesh queues |
 | `consume_queue.py` | Bounded async worker with durable cursor, atomic claims, and allowlisted execution |
 | `continuation_schema.py` | Canonical JSON, embedded-hash validation, schema checks, and atomic continuation writes |
+| `lifecycle_contracts.py` | Pure dataclasses and validators for turn obligations, deterministic execution authorization, and execution-result lifecycles |
 | `resume_thread.py` | Read-only continuation eligibility classifier; only `--dry-run` is supported |
 | `checkpoint_intent.py` | Explicit arming plus immutable, lock-serialized checkpoint creation and CAS intent-head advancement |
 | `continuation_reflex.py` | Formation-owned immutable continuation request/claim/receipt handoff; engine actuation occurs only through the authenticated typed-turn plugin bridge |
@@ -248,6 +249,31 @@ The generated manifest fixes IDs, timestamps, hashes, and boot identity while
 covering `resumable`, `active`, `awaiting_human`, `terminal`,
 `needs_reconciliation`, `invalid`, and `unavailable`.
 
+### Local Lifecycle Contracts
+
+`lifecycle_contracts.py` defines exactly three non-actuating durable record
+contracts, mirrored by `schemas/turn-obligation.schema.json`,
+`schemas/execution-authorization.schema.json`, and
+`schemas/execution-result.schema.json`. Records use sorted-key compact UTF-8
+canonical JSON and domain-separated SHA-256. `turn_obligation` distinguishes a
+closed turn, handed-off responsibility, and objective completion through five
+closed evidence variants; message persistence explicitly proves neither
+transport delivery nor human observation. Strict CAS generations and
+`phase_generation` ensure a `protocol_reflex` advances the existing waiting
+obligation rather than spawning a child.
+
+`execution_authorization` is immutable authority minted only by deterministic
+policy for the versioned MVP adapter registry. Its operational digest binds the
+adapter, canonical payload, target and actor, root-relative durable security
+configuration, field/genesis and continuation lineage, boot-aware lease,
+effect class, expected typed evidence, validity window, and issuer. Model
+orientation is explicitly non-authoritative. `execution_result` separately
+tracks `ready`, `claimed`, `dispatched`, and terminal
+`completed|failed|ambiguous|expired` states without a consumed flag or an
+exactly-once physical-effect claim. Validators accept caller-supplied
+observations for freshness, boot, lease, generation, and configuration-drift
+checks but perform no filesystem reads or actuation.
+
 ### Optional systemd scheduling
 
 [`systemd/`](systemd/) contains brand-neutral source templates for a hardened
@@ -257,7 +283,7 @@ Docker starts auto-restarted bind-mounted containers. A missing mount cannot
 silently fall back to the root-disk directory. See
 [`systemd/README.md`](systemd/README.md) for substitutions, validation,
 installation, recovery, and rollback. These unit templates do not change the
-22-script/module inventory.
+23-script/module inventory.
 
 ---
 
@@ -287,7 +313,7 @@ For the complete, authoritative architectural reference, see:
 ## Git vs. Generated Separation
 
 **Committed (The Scaffold):**
-- All 19 function-literal Python scripts/modules
+- All function-literal Python scripts/modules listed above
 - Brand-neutral `systemd/` service/timer templates and deployment instructions
 - `.recursive-field-root` genesis marker
 - `RECURSIVE_FIELD_SPEC.md` specification

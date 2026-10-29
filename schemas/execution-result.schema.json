@@ -1,0 +1,853 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "record_type",
+    "result_id",
+    "authorization_id",
+    "authorization_sha256",
+    "obligation_id",
+    "phase_generation",
+    "payload_sha256",
+    "generation",
+    "previous_result_sha256",
+    "state",
+    "run_id",
+    "claim",
+    "timestamps",
+    "observed_evidence",
+    "ambiguity_boundary",
+    "terminal_result",
+    "physical_effect_exactly_once_claimed",
+    "execution_result_sha256"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0.0"
+    },
+    "record_type": {
+      "const": "execution_result"
+    },
+    "result_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "authorization_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "authorization_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "obligation_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "phase_generation": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "payload_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "generation": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "previous_result_sha256": {
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "state": {
+      "enum": [
+        "ready",
+        "claimed",
+        "dispatched",
+        "completed",
+        "failed",
+        "ambiguous",
+        "expired"
+      ]
+    },
+    "run_id": {
+      "oneOf": [
+        {
+          "type": "string",
+          "format": "uuid"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "claim": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "claim_id",
+            "holder",
+            "lease_generation",
+            "boot_id",
+            "claimed_at",
+            "expires_at"
+          ],
+          "properties": {
+            "claim_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "holder": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256,
+              "pattern": "^[^\\u0000]+$"
+            },
+            "lease_generation": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "boot_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "claimed_at": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "expires_at": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "timestamps": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ready_at",
+        "claimed_at",
+        "dispatched_at",
+        "terminal_at"
+      ],
+      "properties": {
+        "ready_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "claimed_at": {
+          "oneOf": [
+            {
+              "type": "string",
+              "format": "date-time"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "dispatched_at": {
+          "oneOf": [
+            {
+              "type": "string",
+              "format": "date-time"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "terminal_at": {
+          "oneOf": [
+            {
+              "type": "string",
+              "format": "date-time"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "observed_evidence": {
+      "type": "array",
+      "maxItems": 64,
+      "uniqueItems": true,
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "evidence_type",
+              "path",
+              "expected_exists"
+            ],
+            "properties": {
+              "evidence_type": {
+                "const": "file_exists"
+              },
+              "path": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1024,
+                "pattern": "^(?!/)(?!\\.\\.?$)(?!.*(?:^|/)\\.\\.(?:/|$)).+$"
+              },
+              "expected_exists": {
+                "const": true
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "evidence_type",
+              "path",
+              "expected_sha256"
+            ],
+            "properties": {
+              "evidence_type": {
+                "const": "sha256_match"
+              },
+              "path": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1024,
+                "pattern": "^(?!/)(?!\\.\\.?$)(?!.*(?:^|/)\\.\\.(?:/|$)).+$"
+              },
+              "expected_sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "evidence_type",
+              "ledger_path",
+              "entry_id",
+              "entry_sha256"
+            ],
+            "properties": {
+              "evidence_type": {
+                "const": "ledger_entry_present"
+              },
+              "ledger_path": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1024,
+                "pattern": "^(?!/)(?!\\.\\.?$)(?!.*(?:^|/)\\.\\.(?:/|$)).+$"
+              },
+              "entry_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256,
+                "pattern": "^[^\\u0000]+$"
+              },
+              "entry_sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "ambiguity_boundary": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "last_certain_state",
+            "reason_code",
+            "observed_at"
+          ],
+          "properties": {
+            "last_certain_state": {
+              "enum": [
+                "claimed",
+                "dispatched"
+              ]
+            },
+            "reason_code": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "observed_at": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "terminal_result": {
+      "oneOf": [
+        {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "result_type",
+                "outcome_sha256",
+                "summary_code"
+              ],
+              "properties": {
+                "result_type": {
+                  "const": "completed"
+                },
+                "outcome_sha256": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                },
+                "summary_code": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "result_type",
+                "error_code",
+                "retryable"
+              ],
+              "properties": {
+                "result_type": {
+                  "const": "failed"
+                },
+                "error_code": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "retryable": {
+                  "type": "boolean"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "result_type",
+                "reason_code",
+                "reconciliation_required"
+              ],
+              "properties": {
+                "result_type": {
+                  "const": "ambiguous"
+                },
+                "reason_code": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "reconciliation_required": {
+                  "const": true
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "result_type",
+                "reason_code"
+              ],
+              "properties": {
+                "result_type": {
+                  "const": "expired"
+                },
+                "reason_code": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "physical_effect_exactly_once_claimed": {
+      "const": false
+    },
+    "execution_result_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://recursive-field.local/schemas/execution-result.schema.json",
+  "title": "Recursive Field execution result lifecycle",
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "state": {
+            "const": "ready"
+          }
+        },
+        "required": [
+          "state"
+        ]
+      },
+      "then": {
+        "properties": {
+          "run_id": {
+            "type": "null"
+          },
+          "claim": {
+            "type": "null"
+          },
+          "terminal_result": {
+            "type": "null"
+          },
+          "ambiguity_boundary": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "state": {
+            "const": "claimed"
+          }
+        },
+        "required": [
+          "state"
+        ]
+      },
+      "then": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "claim": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "claim_id",
+              "holder",
+              "lease_generation",
+              "boot_id",
+              "claimed_at",
+              "expires_at"
+            ],
+            "properties": {
+              "claim_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "holder": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256,
+                "pattern": "^[^\\u0000]+$"
+              },
+              "lease_generation": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "boot_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "claimed_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "expires_at": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          },
+          "terminal_result": {
+            "type": "null"
+          },
+          "ambiguity_boundary": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "state": {
+            "const": "dispatched"
+          }
+        },
+        "required": [
+          "state"
+        ]
+      },
+      "then": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "claim": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "claim_id",
+              "holder",
+              "lease_generation",
+              "boot_id",
+              "claimed_at",
+              "expires_at"
+            ],
+            "properties": {
+              "claim_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "holder": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256,
+                "pattern": "^[^\\u0000]+$"
+              },
+              "lease_generation": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "boot_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "claimed_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "expires_at": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          },
+          "terminal_result": {
+            "type": "null"
+          },
+          "ambiguity_boundary": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "state": {
+            "const": "completed"
+          }
+        },
+        "required": [
+          "state"
+        ]
+      },
+      "then": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "claim": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "claim_id",
+              "holder",
+              "lease_generation",
+              "boot_id",
+              "claimed_at",
+              "expires_at"
+            ],
+            "properties": {
+              "claim_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "holder": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256,
+                "pattern": "^[^\\u0000]+$"
+              },
+              "lease_generation": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "boot_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "claimed_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "expires_at": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          },
+          "terminal_result": {
+            "type": "object",
+            "properties": {
+              "result_type": {
+                "const": "completed"
+              }
+            },
+            "required": [
+              "result_type"
+            ]
+          },
+          "ambiguity_boundary": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "state": {
+            "const": "failed"
+          }
+        },
+        "required": [
+          "state"
+        ]
+      },
+      "then": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "claim": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "claim_id",
+              "holder",
+              "lease_generation",
+              "boot_id",
+              "claimed_at",
+              "expires_at"
+            ],
+            "properties": {
+              "claim_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "holder": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256,
+                "pattern": "^[^\\u0000]+$"
+              },
+              "lease_generation": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "boot_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "claimed_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "expires_at": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          },
+          "terminal_result": {
+            "type": "object",
+            "properties": {
+              "result_type": {
+                "const": "failed"
+              }
+            },
+            "required": [
+              "result_type"
+            ]
+          },
+          "ambiguity_boundary": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "state": {
+            "const": "ambiguous"
+          }
+        },
+        "required": [
+          "state"
+        ]
+      },
+      "then": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "claim": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "claim_id",
+              "holder",
+              "lease_generation",
+              "boot_id",
+              "claimed_at",
+              "expires_at"
+            ],
+            "properties": {
+              "claim_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "holder": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256,
+                "pattern": "^[^\\u0000]+$"
+              },
+              "lease_generation": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "boot_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "claimed_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "expires_at": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          },
+          "terminal_result": {
+            "type": "object",
+            "properties": {
+              "result_type": {
+                "const": "ambiguous"
+              }
+            },
+            "required": [
+              "result_type"
+            ]
+          },
+          "ambiguity_boundary": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "last_certain_state",
+              "reason_code",
+              "observed_at"
+            ],
+            "properties": {
+              "last_certain_state": {
+                "enum": [
+                  "claimed",
+                  "dispatched"
+                ]
+              },
+              "reason_code": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "observed_at": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "state": {
+            "const": "expired"
+          }
+        },
+        "required": [
+          "state"
+        ]
+      },
+      "then": {
+        "properties": {
+          "terminal_result": {
+            "type": "object",
+            "properties": {
+              "result_type": {
+                "const": "expired"
+              }
+            },
+            "required": [
+              "result_type"
+            ]
+          },
+          "ambiguity_boundary": {
+            "type": "null"
+          }
+        }
+      }
+    }
+  ]
+}

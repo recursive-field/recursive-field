@@ -426,7 +426,57 @@ Only completed engine evidence permits the plugin to publish the separate
 copy or normal plugin-manager operation, as documented in
 `agent_zero_plugins/README.md`.
 
-### 6.5 Optional systemd queue scheduling
+### 6.5 Local Turn and Deterministic Execution Contracts (`lifecycle_contracts.py`)
+
+This phase defines exactly three durable record types without installing a
+worker, dispatcher, queue, plugin hook, or Engine ingress/egress path:
+`turn_obligation`, `execution_authorization`, and `execution_result`. Draft
+2020-12 schemas live at `schemas/turn-obligation.schema.json`,
+`schemas/execution-authorization.schema.json`, and
+`schemas/execution-result.schema.json`. Python dataclasses, constructors, and
+validators are pure and perform no filesystem or infrastructure observation.
+
+All three records use sorted-key, compact-separator, UTF-8 canonical JSON with
+`allow_nan=false` and a record-specific domain prefix before SHA-256. Context
+IDs are bounded opaque strings. UUID format is reserved for identifiers that
+are actually UUIDs. Every mutable lifecycle uses a strictly increasing CAS
+generation and predecessor hash; explicit transition tables lock terminal
+states.
+
+`turn_obligation` separates three facts that must not collapse into one:
+whether the current turn is closed, where responsibility now rests, and whether
+the objective is complete. Its closed tagged evidence union is
+`terminal_response_emitted`, `checkpoint_planted`, `human_gate_reached`,
+`handed_off_to_intent`, or `reconciliation_claimed`. A persisted response or
+human gate explicitly claims neither transport delivery nor human observation.
+`phase_generation` is an anti-recursion coordinate: `protocol_reflex` may only
+advance the same waiting obligation to active and must increment the phase once;
+it cannot mint a child obligation.
+
+`execution_authorization` is immutable and may be minted only by deterministic
+policy for an entry in the versioned deterministic-adapter MVP registry. Model
+orientation is never authority. The operational digest binds adapter identity
+and version, canonical payload, target and acting namespaces, durable security
+profile and field-root-relative configuration digest, field and genesis
+identity, opaque context, obligation phase, intent generation, checkpoint
+sequence/hash, boot-aware lease, effect class, expected typed evidence, validity
+window, and policy issuer/authority. The initial registry contains only the
+existing deterministic `inspect_unit_cell` observation adapter; this contract
+does not call it.
+
+`execution_result` has a separate lifecycle:
+`ready -> claimed -> dispatched -> completed|failed|ambiguous`, with bounded
+pre-dispatch failure/expiry alternatives. Claim ID, run ID, holder, boot ID,
+lease generation, and timestamps remain immutable after claim. Terminal
+postcondition evidence is a closed tagged union containing at least bounded
+`file_exists`, `sha256_match`, and `ledger_entry_present` attestations.
+Ambiguity records the last certain boundary and requires reconciliation.
+There is no consumed boolean, and the record explicitly refuses to claim
+exactly-once physical effects. Freshness, security/configuration drift,
+boot/lease drift, and intent/phase generation checks consume caller-supplied
+snapshots only; live evaluation belongs to a later, separately authorized phase.
+
+### 6.6 Optional systemd queue scheduling
 
 `systemd/queue-worker.service.in`, `systemd/queue-worker.timer.in`, and the
 `systemd/docker.service.d/field-root.conf.in` drop-in are brand-neutral
@@ -575,7 +625,7 @@ The resolver uses `KEY = VALUE` pairs to promote knowledge bindings above the st
 
 | Metric | Value |
 | --- | --- |
-| Total scripts/modules | 22 |
+| Total scripts/modules | 23 |
 | Active agents | 3 (`field-sentinel`, `field-scout`, `sentinel-sub-1`) |
 | Active meshes | 2 (`sentinel-scout-mesh`, `field-sentinel-sentinel-sub-1-mesh`) |
 | Active gateways | 2 (`sentinel-cli-gw`, `mesh-api-gw`) |
@@ -608,6 +658,7 @@ The resolver uses `KEY = VALUE` pairs to promote knowledge bindings above the st
 | 20 | `checkpoint_intent.py` | 0/3/4/5 | Explicit arm/checkpoint recording, immutable checkpoint publish, locked CAS head update |
 | 21 | `continuation_reflex.py` | N/A | Formation-owned request/claim/fired-receipt handoff consumed by the authenticated typed-turn plugin bridge |
 | 22 | `generate_continuation_fixtures.py` | 0/2 | Test-only deterministic fixtures for all seven classifications |
+| 23 | `lifecycle_contracts.py` | N/A | Pure three-record dataclasses, hashes, transitions, freshness checks, and deterministic fixtures |
 
 ### 11.3 Portability Proof
 
@@ -642,6 +693,7 @@ The resolver uses `KEY = VALUE` pairs to promote knowledge bindings above the st
 ├── delegate_task.py            # Task delegation primitive
 ├── consume_queue.py            # Bounded async queue worker
 ├── continuation_schema.py      # Continuation schema/hash/write contracts
+├── lifecycle_contracts.py      # Pure obligation/authorization/result contracts
 ├── resume_thread.py            # Read-only continuation dry-run classifier
 ├── checkpoint_intent.py        # Explicit formation-side arm/checkpoint recorder
 ├── continuation_reflex.py      # Adapter-neutral continuation handoff/audit contract
@@ -649,7 +701,10 @@ The resolver uses `KEY = VALUE` pairs to promote knowledge bindings above the st
 ├── schemas/
 │   ├── continuation-intent.schema.json
 │   ├── continuation-checkpoint.schema.json
-│   └── continuation-reflex.schema.json
+│   ├── continuation-reflex.schema.json
+│   ├── turn-obligation.schema.json
+│   ├── execution-authorization.schema.json
+│   └── execution-result.schema.json
 ├── agent_zero_plugins/         # Tracked installable plugin packages (not formation scripts)
 │   ├── README.md               # Packaging/install boundary
 │   └── continuation_reflex/    # Authenticated typed-turn bridge plugin source
@@ -762,6 +817,7 @@ state/
 | `delegate_task.py` | `python3 delegate_task.py <sender> <recipient> <mesh> "<payload>" [--payload-file <path>] [--mode acknowledge|async]` | 0 delegated · 1 no root · 2 no agent/mesh · 3 no connection · 4 security | `find_root` |
 | `consume_queue.py` | `python3 consume_queue.py <recipient> <mesh> --once` | 0 done/idle · 1 runtime · 2 missing · 3 validation · 4 security halt · 5 adapter failure | `find_root`, `verify_unit_cell`, `persist_state` |
 | `continuation_schema.py` | Imported formation library | N/A | Standard library; checked-in schemas |
+| `lifecycle_contracts.py` | Imported pure contract library | N/A | `continuation_schema.canonical_json_bytes`, checked-in lifecycle schemas; no live-state evaluation |
 | `resume_thread.py` | `python3 resume_thread.py <intent_uuid> --dry-run [--at <ISO-8601>] [--boot-id <uuid>] [--current-token-source <source> --current-token-model capped|metered] [--start <path>]` | 0 resumable · 10 active · 11 human · 12 terminal · 20 reconcile · 30 invalid · 40 unavailable | `find_root`, `continuation_schema` |
 | `checkpoint_intent.py` | `python3 checkpoint_intent.py arm ...` or `python3 checkpoint_intent.py checkpoint <intent_uuid> ...` | 0 recorded/idempotent · 3 invalid · 4 conflict · 5 unavailable | `find_root`, `continuation_schema`, `resume_thread` validation helpers |
 | `continuation_reflex.py` | Imported formation handoff library | N/A | `continuation_schema`, `resume_thread`; consumed by the authenticated plugin bridge, while engine dispatch remains owned by `AgentContext.continuation_turn()` |
