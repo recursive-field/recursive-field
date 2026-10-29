@@ -443,15 +443,31 @@ are actually UUIDs. Every mutable lifecycle uses a strictly increasing CAS
 generation and predecessor hash; explicit transition tables lock terminal
 states.
 
-`turn_obligation` separates three facts that must not collapse into one:
+`turn_obligation` v1.1 separates three facts that must not collapse into one:
 whether the current turn is closed, where responsibility now rests, and whether
-the objective is complete. Its closed tagged evidence union is
-`terminal_response_emitted`, `checkpoint_planted`, `human_gate_reached`,
-`handed_off_to_intent`, or `reconciliation_claimed`. A persisted response or
-human gate explicitly claims neither transport delivery nor human observation.
-`phase_generation` is an anti-recursion coordinate: `protocol_reflex` may only
-advance the same waiting obligation to active and must increment the phase once;
-it cannot mint a child obligation.
+the objective is complete. Its lineage is a closed tagged union. An
+`ordinary_ingress` lineage contains field genesis, bounded opaque context, and
+a canonical ingress anchor (`ingress_id`, ingress digest, projection digest,
+timestamp, and ingress identity), but contains no intent or checkpoint fields
+and therefore claims no formation authority. A `bound` lineage preserves that
+anchor and adds non-null intent ID, checkpoint ID/hash, and binding timestamp.
+Partial lineage combinations are invalid.
+
+The only unbound-to-bound transition is a strict monotonic CAS update of the
+same obligation and immutable ingress anchor, sourced by formation evidence:
+`checkpoint_planted` closes to `waiting`, while `handed_off_to_intent` closes
+to `handed_off`. Both evidence forms bind the same intent/checkpoint values
+written into lineage. Once bound, lineage cannot be changed or rebound. An
+ordinary ingress may instead close directly through
+`terminal_response_emitted` without acquiring formation lineage.
+
+The closed evidence union remains `terminal_response_emitted`,
+`checkpoint_planted`, `human_gate_reached`, `handed_off_to_intent`, or
+`reconciliation_claimed`. A persisted response or human gate explicitly claims
+neither transport delivery nor human observation. `phase_generation` is an
+anti-recursion coordinate: `protocol_reflex` rejects unbound obligations, may
+only advance the same bound waiting obligation to active, and must increment
+the phase exactly once; it cannot mint a child obligation.
 
 `execution_authorization` is immutable and may be minted only by deterministic
 policy for an entry in the versioned deterministic-adapter MVP registry. Model

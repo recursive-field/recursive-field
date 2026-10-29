@@ -255,12 +255,19 @@ covering `resumable`, `active`, `awaiting_human`, `terminal`,
 contracts, mirrored by `schemas/turn-obligation.schema.json`,
 `schemas/execution-authorization.schema.json`, and
 `schemas/execution-result.schema.json`. Records use sorted-key compact UTF-8
-canonical JSON and domain-separated SHA-256. `turn_obligation` distinguishes a
-closed turn, handed-off responsibility, and objective completion through five
-closed evidence variants; message persistence explicitly proves neither
-transport delivery nor human observation. Strict CAS generations and
-`phase_generation` ensure a `protocol_reflex` advances the existing waiting
-obligation rather than spawning a child.
+canonical JSON and domain-separated SHA-256. `turn_obligation` v1.1 uses a
+closed lineage union: an ordinary-ingress anchor binds the field genesis,
+opaque context, ingress identity/timestamp, canonical ingress digest, and
+projection digest without claiming intent or checkpoint authority; a bound
+lineage retains that anchor and adds genuine intent/checkpoint evidence.
+Binding is a single strict-CAS formation transition through
+`checkpoint_planted` or `handed_off_to_intent`, after which lineage is
+immutable. The contract continues to distinguish a closed turn, handed-off
+responsibility, and objective completion through five closed evidence
+variants; message persistence explicitly proves neither transport delivery nor
+human observation. `protocol_reflex` rejects unbound anchors and advances the
+same bound waiting obligation with one `phase_generation` increment rather
+than spawning a child.
 
 `execution_authorization` is immutable authority minted only by deterministic
 policy for the versioned MVP adapter registry. Its operational digest binds the

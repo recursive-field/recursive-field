@@ -1,15 +1,14 @@
 {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://recursive-field.local/schemas/turn-obligation.schema.json",
+  "title": "Recursive Field durable turn obligation",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "schema_version",
     "record_type",
     "obligation_id",
-    "field_genesis_uuid",
-    "context_id",
-    "intent_id",
-    "checkpoint_id",
-    "checkpoint_sha256",
+    "lineage",
     "generation",
     "phase_generation",
     "advance_source",
@@ -23,520 +22,210 @@
     "turn_obligation_sha256"
   ],
   "properties": {
-    "schema_version": {
-      "const": "1.0.0"
+    "schema_version": {"const": "1.1.0"},
+    "record_type": {"const": "turn_obligation"},
+    "obligation_id": {"type": "string", "format": "uuid"},
+    "lineage": {
+      "oneOf": [
+        {"$ref": "#/$defs/ordinaryIngressLineage"},
+        {"$ref": "#/$defs/boundLineage"}
+      ]
     },
-    "record_type": {
-      "const": "turn_obligation"
+    "generation": {"type": "integer", "minimum": 1},
+    "phase_generation": {"type": "integer", "minimum": 0},
+    "advance_source": {
+      "enum": ["user_ingress", "engine", "protocol_reflex", "formation", "deterministic_policy", "human"]
     },
-    "obligation_id": {
-      "type": "string",
-      "format": "uuid"
+    "state": {
+      "enum": ["open", "active", "waiting", "awaiting_human", "handed_off", "reconciling", "closed"]
     },
-    "field_genesis_uuid": {
-      "type": "string",
-      "format": "uuid"
+    "turn_closed": {"type": "boolean"},
+    "responsibility_state": {
+      "enum": ["retained", "awaiting_human", "handed_off", "reconciliation", "none"]
     },
-    "context_id": {
+    "objective_status": {"enum": ["incomplete", "completed", "cancelled"]},
+    "closure_evidence": {
+      "oneOf": [
+        {"type": "null"},
+        {"$ref": "#/$defs/terminalResponseEmitted"},
+        {"$ref": "#/$defs/checkpointPlanted"},
+        {"$ref": "#/$defs/humanGateReached"},
+        {"$ref": "#/$defs/handedOffToIntent"},
+        {"$ref": "#/$defs/reconciliationClaimed"}
+      ]
+    },
+    "recorded_at": {"type": "string", "format": "date-time"},
+    "previous_record_sha256": {
+      "oneOf": [
+        {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        {"type": "null"}
+      ]
+    },
+    "turn_obligation_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  },
+  "$defs": {
+    "opaque": {
       "type": "string",
       "minLength": 1,
       "maxLength": 256,
       "pattern": "^[^\\u0000]+$"
     },
-    "intent_id": {
-      "type": "string",
-      "format": "uuid"
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "ingressAnchor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ingress_id", "ingress_sha256", "projection_sha256", "ingressed_at", "ingress_identity"],
+      "properties": {
+        "ingress_id": {"type": "string", "format": "uuid"},
+        "ingress_sha256": {"$ref": "#/$defs/sha256"},
+        "projection_sha256": {"$ref": "#/$defs/sha256"},
+        "ingressed_at": {"type": "string", "format": "date-time"},
+        "ingress_identity": {"$ref": "#/$defs/opaque"}
+      }
     },
-    "checkpoint_id": {
-      "type": "string",
-      "format": "uuid"
+    "ordinaryIngressLineage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["lineage_mode", "field_genesis_uuid", "context_id", "ingress"],
+      "properties": {
+        "lineage_mode": {"const": "ordinary_ingress"},
+        "field_genesis_uuid": {"type": "string", "format": "uuid"},
+        "context_id": {"$ref": "#/$defs/opaque"},
+        "ingress": {"$ref": "#/$defs/ingressAnchor"}
+      }
     },
-    "checkpoint_sha256": {
-      "type": "string",
-      "pattern": "^[0-9a-f]{64}$"
+    "boundLineage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "lineage_mode",
+        "field_genesis_uuid",
+        "context_id",
+        "ingress",
+        "intent_id",
+        "checkpoint_id",
+        "checkpoint_sha256",
+        "bound_at"
+      ],
+      "properties": {
+        "lineage_mode": {"const": "bound"},
+        "field_genesis_uuid": {"type": "string", "format": "uuid"},
+        "context_id": {"$ref": "#/$defs/opaque"},
+        "ingress": {"$ref": "#/$defs/ingressAnchor"},
+        "intent_id": {"type": "string", "format": "uuid"},
+        "checkpoint_id": {"type": "string", "format": "uuid"},
+        "checkpoint_sha256": {"$ref": "#/$defs/sha256"},
+        "bound_at": {"type": "string", "format": "date-time"}
+      }
     },
-    "generation": {
-      "type": "integer",
-      "minimum": 1
+    "terminalResponseEmitted": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["evidence_type", "message_ref", "persisted_at", "delivery_claimed", "human_observation_claimed"],
+      "properties": {
+        "evidence_type": {"const": "terminal_response_emitted"},
+        "message_ref": {"$ref": "#/$defs/opaque"},
+        "persisted_at": {"type": "string", "format": "date-time"},
+        "delivery_claimed": {"const": false},
+        "human_observation_claimed": {"const": false}
+      }
     },
-    "phase_generation": {
-      "type": "integer",
-      "minimum": 0
+    "checkpointPlanted": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["evidence_type", "intent_id", "checkpoint_id", "checkpoint_sha256", "planted_at"],
+      "properties": {
+        "evidence_type": {"const": "checkpoint_planted"},
+        "intent_id": {"type": "string", "format": "uuid"},
+        "checkpoint_id": {"type": "string", "format": "uuid"},
+        "checkpoint_sha256": {"$ref": "#/$defs/sha256"},
+        "planted_at": {"type": "string", "format": "date-time"}
+      }
     },
-    "advance_source": {
-      "enum": [
-        "user_ingress",
-        "protocol_reflex",
-        "deterministic_policy",
-        "human"
-      ]
+    "humanGateReached": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["evidence_type", "gate_id", "reason_code", "reached_at", "human_observation_claimed"],
+      "properties": {
+        "evidence_type": {"const": "human_gate_reached"},
+        "gate_id": {"type": "string", "format": "uuid"},
+        "reason_code": {"type": "string", "minLength": 1, "maxLength": 128},
+        "reached_at": {"type": "string", "format": "date-time"},
+        "human_observation_claimed": {"const": false}
+      }
     },
-    "state": {
-      "enum": [
-        "open",
-        "active",
-        "waiting",
-        "awaiting_human",
-        "handed_off",
-        "reconciling",
-        "closed"
-      ]
+    "handedOffToIntent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["evidence_type", "intent_id", "checkpoint_id", "checkpoint_sha256", "handed_off_at"],
+      "properties": {
+        "evidence_type": {"const": "handed_off_to_intent"},
+        "intent_id": {"type": "string", "format": "uuid"},
+        "checkpoint_id": {"type": "string", "format": "uuid"},
+        "checkpoint_sha256": {"$ref": "#/$defs/sha256"},
+        "handed_off_at": {"type": "string", "format": "date-time"}
+      }
     },
-    "turn_closed": {
-      "type": "boolean"
-    },
-    "responsibility_state": {
-      "enum": [
-        "retained",
-        "awaiting_human",
-        "handed_off",
-        "reconciliation",
-        "none"
-      ]
-    },
-    "objective_status": {
-      "enum": [
-        "incomplete",
-        "completed",
-        "cancelled"
-      ]
-    },
-    "closure_evidence": {
-      "oneOf": [
-        {
-          "oneOf": [
-            {
-              "type": "object",
-              "additionalProperties": false,
-              "required": [
-                "evidence_type",
-                "message_ref",
-                "persisted_at",
-                "delivery_claimed",
-                "human_observation_claimed"
-              ],
-              "properties": {
-                "evidence_type": {
-                  "const": "terminal_response_emitted"
-                },
-                "message_ref": {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 256,
-                  "pattern": "^[^\\u0000]+$"
-                },
-                "persisted_at": {
-                  "type": "string",
-                  "format": "date-time"
-                },
-                "delivery_claimed": {
-                  "const": false
-                },
-                "human_observation_claimed": {
-                  "const": false
-                }
-              }
-            },
-            {
-              "type": "object",
-              "additionalProperties": false,
-              "required": [
-                "evidence_type",
-                "checkpoint_id",
-                "checkpoint_sha256",
-                "planted_at"
-              ],
-              "properties": {
-                "evidence_type": {
-                  "const": "checkpoint_planted"
-                },
-                "checkpoint_id": {
-                  "type": "string",
-                  "format": "uuid"
-                },
-                "checkpoint_sha256": {
-                  "type": "string",
-                  "pattern": "^[0-9a-f]{64}$"
-                },
-                "planted_at": {
-                  "type": "string",
-                  "format": "date-time"
-                }
-              }
-            },
-            {
-              "type": "object",
-              "additionalProperties": false,
-              "required": [
-                "evidence_type",
-                "gate_id",
-                "reason_code",
-                "reached_at",
-                "human_observation_claimed"
-              ],
-              "properties": {
-                "evidence_type": {
-                  "const": "human_gate_reached"
-                },
-                "gate_id": {
-                  "type": "string",
-                  "format": "uuid"
-                },
-                "reason_code": {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 128
-                },
-                "reached_at": {
-                  "type": "string",
-                  "format": "date-time"
-                },
-                "human_observation_claimed": {
-                  "const": false
-                }
-              }
-            },
-            {
-              "type": "object",
-              "additionalProperties": false,
-              "required": [
-                "evidence_type",
-                "intent_id",
-                "checkpoint_id",
-                "checkpoint_sha256",
-                "handed_off_at"
-              ],
-              "properties": {
-                "evidence_type": {
-                  "const": "handed_off_to_intent"
-                },
-                "intent_id": {
-                  "type": "string",
-                  "format": "uuid"
-                },
-                "checkpoint_id": {
-                  "type": "string",
-                  "format": "uuid"
-                },
-                "checkpoint_sha256": {
-                  "type": "string",
-                  "pattern": "^[0-9a-f]{64}$"
-                },
-                "handed_off_at": {
-                  "type": "string",
-                  "format": "date-time"
-                }
-              }
-            },
-            {
-              "type": "object",
-              "additionalProperties": false,
-              "required": [
-                "evidence_type",
-                "claim_id",
-                "execution_result_id",
-                "claimed_at"
-              ],
-              "properties": {
-                "evidence_type": {
-                  "const": "reconciliation_claimed"
-                },
-                "claim_id": {
-                  "type": "string",
-                  "format": "uuid"
-                },
-                "execution_result_id": {
-                  "type": "string",
-                  "format": "uuid"
-                },
-                "claimed_at": {
-                  "type": "string",
-                  "format": "date-time"
-                }
-              }
-            }
-          ]
-        },
-        {
-          "type": "null"
-        }
-      ]
-    },
-    "recorded_at": {
-      "type": "string",
-      "format": "date-time"
-    },
-    "previous_record_sha256": {
-      "oneOf": [
-        {
-          "type": "string",
-          "pattern": "^[0-9a-f]{64}$"
-        },
-        {
-          "type": "null"
-        }
-      ]
-    },
-    "turn_obligation_sha256": {
-      "type": "string",
-      "pattern": "^[0-9a-f]{64}$"
+    "reconciliationClaimed": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["evidence_type", "claim_id", "execution_result_id", "claimed_at"],
+      "properties": {
+        "evidence_type": {"const": "reconciliation_claimed"},
+        "claim_id": {"type": "string", "format": "uuid"},
+        "execution_result_id": {"type": "string", "format": "uuid"},
+        "claimed_at": {"type": "string", "format": "date-time"}
+      }
     }
   },
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://recursive-field.local/schemas/turn-obligation.schema.json",
-  "title": "Recursive Field durable turn obligation",
   "allOf": [
     {
-      "if": {
-        "properties": {
-          "state": {
-            "const": "open"
-          }
-        },
-        "required": [
-          "state"
-        ]
-      },
+      "if": {"properties": {"generation": {"const": 1}}, "required": ["generation"]},
       "then": {
         "properties": {
-          "turn_closed": {
-            "const": false
-          },
-          "responsibility_state": {
-            "const": "retained"
-          },
-          "objective_status": {
-            "enum": [
-              "incomplete"
-            ]
-          },
-          "closure_evidence": {
-            "type": "null"
-          }
+          "phase_generation": {"const": 0},
+          "advance_source": {"const": "user_ingress"},
+          "state": {"const": "open"},
+          "turn_closed": {"const": false},
+          "responsibility_state": {"const": "retained"},
+          "objective_status": {"const": "incomplete"},
+          "closure_evidence": {"type": "null"},
+          "previous_record_sha256": {"type": "null"},
+          "lineage": {"$ref": "#/$defs/ordinaryIngressLineage"}
         }
       }
     },
     {
-      "if": {
-        "properties": {
-          "state": {
-            "const": "active"
-          }
-        },
-        "required": [
-          "state"
-        ]
-      },
-      "then": {
-        "properties": {
-          "turn_closed": {
-            "const": false
-          },
-          "responsibility_state": {
-            "const": "retained"
-          },
-          "objective_status": {
-            "enum": [
-              "incomplete"
-            ]
-          },
-          "closure_evidence": {
-            "type": "null"
-          }
-        }
-      }
+      "if": {"properties": {"state": {"const": "open"}}, "required": ["state"]},
+      "then": {"properties": {"turn_closed": {"const": false}, "responsibility_state": {"const": "retained"}, "objective_status": {"const": "incomplete"}, "closure_evidence": {"type": "null"}}}
     },
     {
-      "if": {
-        "properties": {
-          "state": {
-            "const": "waiting"
-          }
-        },
-        "required": [
-          "state"
-        ]
-      },
-      "then": {
-        "properties": {
-          "turn_closed": {
-            "const": true
-          },
-          "responsibility_state": {
-            "const": "retained"
-          },
-          "objective_status": {
-            "enum": [
-              "incomplete"
-            ]
-          },
-          "closure_evidence": {
-            "type": "object",
-            "properties": {
-              "evidence_type": {
-                "const": "checkpoint_planted"
-              }
-            },
-            "required": [
-              "evidence_type"
-            ]
-          }
-        }
-      }
+      "if": {"properties": {"state": {"const": "active"}}, "required": ["state"]},
+      "then": {"properties": {"turn_closed": {"const": false}, "responsibility_state": {"const": "retained"}, "objective_status": {"const": "incomplete"}, "closure_evidence": {"type": "null"}}}
     },
     {
-      "if": {
-        "properties": {
-          "state": {
-            "const": "awaiting_human"
-          }
-        },
-        "required": [
-          "state"
-        ]
-      },
-      "then": {
-        "properties": {
-          "turn_closed": {
-            "const": true
-          },
-          "responsibility_state": {
-            "const": "awaiting_human"
-          },
-          "objective_status": {
-            "enum": [
-              "incomplete"
-            ]
-          },
-          "closure_evidence": {
-            "type": "object",
-            "properties": {
-              "evidence_type": {
-                "const": "human_gate_reached"
-              }
-            },
-            "required": [
-              "evidence_type"
-            ]
-          }
-        }
-      }
+      "if": {"properties": {"state": {"const": "waiting"}}, "required": ["state"]},
+      "then": {"properties": {"turn_closed": {"const": true}, "responsibility_state": {"const": "retained"}, "objective_status": {"const": "incomplete"}, "closure_evidence": {"$ref": "#/$defs/checkpointPlanted"}, "lineage": {"$ref": "#/$defs/boundLineage"}}}
     },
     {
-      "if": {
-        "properties": {
-          "state": {
-            "const": "handed_off"
-          }
-        },
-        "required": [
-          "state"
-        ]
-      },
-      "then": {
-        "properties": {
-          "turn_closed": {
-            "const": true
-          },
-          "responsibility_state": {
-            "const": "handed_off"
-          },
-          "objective_status": {
-            "enum": [
-              "incomplete"
-            ]
-          },
-          "closure_evidence": {
-            "type": "object",
-            "properties": {
-              "evidence_type": {
-                "const": "handed_off_to_intent"
-              }
-            },
-            "required": [
-              "evidence_type"
-            ]
-          }
-        }
-      }
+      "if": {"properties": {"state": {"const": "awaiting_human"}}, "required": ["state"]},
+      "then": {"properties": {"turn_closed": {"const": true}, "responsibility_state": {"const": "awaiting_human"}, "objective_status": {"const": "incomplete"}, "closure_evidence": {"$ref": "#/$defs/humanGateReached"}}}
     },
     {
-      "if": {
-        "properties": {
-          "state": {
-            "const": "reconciling"
-          }
-        },
-        "required": [
-          "state"
-        ]
-      },
-      "then": {
-        "properties": {
-          "turn_closed": {
-            "const": true
-          },
-          "responsibility_state": {
-            "const": "reconciliation"
-          },
-          "objective_status": {
-            "enum": [
-              "incomplete"
-            ]
-          },
-          "closure_evidence": {
-            "type": "object",
-            "properties": {
-              "evidence_type": {
-                "const": "reconciliation_claimed"
-              }
-            },
-            "required": [
-              "evidence_type"
-            ]
-          }
-        }
-      }
+      "if": {"properties": {"state": {"const": "handed_off"}}, "required": ["state"]},
+      "then": {"properties": {"turn_closed": {"const": true}, "responsibility_state": {"const": "handed_off"}, "objective_status": {"const": "incomplete"}, "closure_evidence": {"$ref": "#/$defs/handedOffToIntent"}, "lineage": {"$ref": "#/$defs/boundLineage"}}}
     },
     {
-      "if": {
-        "properties": {
-          "state": {
-            "const": "closed"
-          }
-        },
-        "required": [
-          "state"
-        ]
-      },
-      "then": {
-        "properties": {
-          "turn_closed": {
-            "const": true
-          },
-          "responsibility_state": {
-            "const": "none"
-          },
-          "objective_status": {
-            "enum": [
-              "incomplete",
-              "completed",
-              "cancelled"
-            ]
-          },
-          "closure_evidence": {
-            "type": "object",
-            "properties": {
-              "evidence_type": {
-                "const": "terminal_response_emitted"
-              }
-            },
-            "required": [
-              "evidence_type"
-            ]
-          }
-        }
-      }
+      "if": {"properties": {"state": {"const": "reconciling"}}, "required": ["state"]},
+      "then": {"properties": {"turn_closed": {"const": true}, "responsibility_state": {"const": "reconciliation"}, "objective_status": {"const": "incomplete"}, "closure_evidence": {"$ref": "#/$defs/reconciliationClaimed"}, "lineage": {"$ref": "#/$defs/boundLineage"}}}
+    },
+    {
+      "if": {"properties": {"state": {"const": "closed"}}, "required": ["state"]},
+      "then": {"properties": {"turn_closed": {"const": true}, "responsibility_state": {"const": "none"}, "closure_evidence": {"$ref": "#/$defs/terminalResponseEmitted"}}}
+    },
+    {
+      "if": {"properties": {"advance_source": {"const": "protocol_reflex"}}, "required": ["advance_source"]},
+      "then": {"properties": {"state": {"const": "active"}, "lineage": {"$ref": "#/$defs/boundLineage"}}}
     }
   ]
 }

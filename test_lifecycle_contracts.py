@@ -8,12 +8,18 @@ import json
 import unittest
 from pathlib import Path
 
+try:
+    import jsonschema
+except ModuleNotFoundError:  # The task runtime intentionally has no schema package.
+    jsonschema = None
+
 from lifecycle_contracts import (
     AuthorizationFreshness,
     LifecycleConflictError,
     LifecycleContractError,
     advance_execution_result,
     advance_turn_obligation,
+    bind_turn_obligation,
     build_execution_result,
     build_turn_obligation,
     domain_sha256,
@@ -40,6 +46,9 @@ U = {
     "claim": "00000000-0000-4000-8000-00000000000a",
     "gate": "00000000-0000-4000-8000-00000000000b",
     "reconcile": "00000000-0000-4000-8000-00000000000c",
+    "ingress": "00000000-0000-4000-8000-00000000000d",
+    "intent_2": "00000000-0000-4000-8000-00000000000e",
+    "checkpoint_2": "00000000-0000-4000-8000-00000000000f",
 }
 H = {
     "checkpoint": "1" * 64,
@@ -48,6 +57,9 @@ H = {
     "file": "4" * 64,
     "ledger": "5" * 64,
     "outcome": "6" * 64,
+    "ingress": "7" * 64,
+    "projection": "8" * 64,
+    "checkpoint_2": "9" * 64,
 }
 
 
@@ -65,16 +77,63 @@ def sorted_evidence() -> list[dict]:
     return sorted(values, key=lambda item: json.dumps(item, sort_keys=True, separators=(",", ":"), ensure_ascii=False))
 
 
+def checkpoint_evidence(*, at: str = "2026-01-01T00:01:00+00:00") -> dict:
+    return {
+        "evidence_type": "checkpoint_planted",
+        "intent_id": U["intent"],
+        "checkpoint_id": U["checkpoint"],
+        "checkpoint_sha256": H["checkpoint"],
+        "planted_at": at,
+    }
+
+
+def handoff_evidence(*, at: str = "2026-01-01T00:01:00+00:00") -> dict:
+    return {
+        "evidence_type": "handed_off_to_intent",
+        "intent_id": U["intent"],
+        "checkpoint_id": U["checkpoint"],
+        "checkpoint_sha256": H["checkpoint"],
+        "handed_off_at": at,
+    }
+
+
+def terminal_evidence(*, at: str = "2026-01-01T00:01:00+00:00") -> dict:
+    return {
+        "evidence_type": "terminal_response_emitted",
+        "message_ref": "assistant-history-record-7",
+        "persisted_at": at,
+        "delivery_claimed": False,
+        "human_observation_claimed": False,
+    }
+
+
 class LifecycleFixture(unittest.TestCase):
     def obligation(self):
         return build_turn_obligation(
             obligation_id=U["obligation"],
             field_genesis_uuid=U["field"],
             context_id="opaque context/id + punctuation",
-            intent_id=U["intent"],
-            checkpoint_id=U["checkpoint"],
-            checkpoint_sha256=H["checkpoint"],
+            ingress_id=U["ingress"],
+            ingress_sha256=H["ingress"],
+            projection_sha256=H["projection"],
+            ingressed_at="2026-01-01T00:00:00+00:00",
+            ingress_identity="agent-zero:user-message",
             recorded_at="2026-01-01T00:00:00+00:00",
+        )
+
+    def bound_waiting(self):
+        return bind_turn_obligation(
+            self.obligation(),
+            recorded_at="2026-01-01T00:01:00+00:00",
+            closure_evidence=checkpoint_evidence(),
+        )
+
+    def bound_active(self):
+        return advance_turn_obligation(
+            self.bound_waiting(),
+            state="active",
+            recorded_at="2026-01-01T00:02:00+00:00",
+            advance_source="protocol_reflex",
         )
 
     def authorization(self):
@@ -153,77 +212,133 @@ class CanonicalAndTurnTests(LifecycleFixture):
         with self.assertRaises(ValueError):
             domain_sha256("a", {"bad": float("nan")})
 
-    def test_opaque_context_is_not_uuid_only(self):
+    def test_valid_unbound_ordinary_ingress_uses_opaque_context(self):
         record = self.obligation()
+        self.assertEqual(record.lineage["lineage_mode"], "ordinary_ingress")
         self.assertEqual(record.context_id, "opaque context/id + punctuation")
+        self.assertIsNone(record.intent_id)
+        self.assertEqual(record.state, "open")
         validate_turn_obligation(record.to_document())
 
-    def test_all_five_closed_evidence_variants(self):
-        initial = self.obligation()
-        cases = [
-            (
-                "waiting",
-                {"evidence_type": "checkpoint_planted", "checkpoint_id": U["checkpoint"], "checkpoint_sha256": H["checkpoint"], "planted_at": "2026-01-01T00:01:00+00:00"},
-                "incomplete",
-            ),
-            (
-                "awaiting_human",
-                {"evidence_type": "human_gate_reached", "gate_id": U["gate"], "reason_code": "authority_required", "reached_at": "2026-01-01T00:01:00+00:00", "human_observation_claimed": False},
-                "incomplete",
-            ),
-            (
-                "handed_off",
-                {"evidence_type": "handed_off_to_intent", "intent_id": U["intent"], "checkpoint_id": U["checkpoint"], "checkpoint_sha256": H["checkpoint"], "handed_off_at": "2026-01-01T00:01:00+00:00"},
-                "incomplete",
-            ),
-            (
-                "reconciling",
-                {"evidence_type": "reconciliation_claimed", "claim_id": U["reconcile"], "execution_result_id": U["result"], "claimed_at": "2026-01-01T00:01:00+00:00"},
-                "incomplete",
-            ),
-            (
-                "closed",
-                {"evidence_type": "terminal_response_emitted", "message_ref": "assistant-history-record-7", "persisted_at": "2026-01-01T00:01:00+00:00", "delivery_claimed": False, "human_observation_claimed": False},
-                "completed",
-            ),
-        ]
-        for state, evidence, objective in cases:
-            with self.subTest(state=state):
-                result = advance_turn_obligation(
-                    initial,
-                    state=state,
-                    recorded_at="2026-01-01T00:01:00+00:00",
-                    advance_source="deterministic_policy",
-                    closure_evidence=evidence,
-                    objective_status=objective,
-                )
-                self.assertTrue(result.turn_closed)
-                self.assertEqual(result.objective_status, objective)
+    def test_invalid_partial_lineage_is_rejected(self):
+        partial = self.obligation().to_document()
+        partial["lineage"]["intent_id"] = U["intent"]
+        partial["turn_obligation_sha256"] = domain_sha256(
+            "turn-obligation", {k: v for k, v in partial.items() if k != "turn_obligation_sha256"}
+        )
+        with self.assertRaisesRegex(LifecycleContractError, "unexpected fields"):
+            validate_turn_obligation(partial)
 
-    def test_message_persistence_cannot_claim_delivery_or_observation(self):
-        evidence = {
-            "evidence_type": "terminal_response_emitted",
-            "message_ref": "history-1",
-            "persisted_at": "2026-01-01T00:01:00+00:00",
-            "delivery_claimed": True,
-            "human_observation_claimed": False,
-        }
-        with self.assertRaisesRegex(LifecycleContractError, "cannot claim delivery"):
-            advance_turn_obligation(
-                self.obligation(), state="closed", recorded_at="2026-01-01T00:01:00+00:00",
-                advance_source="deterministic_policy", closure_evidence=evidence,
+        bound = self.bound_waiting().to_document()
+        del bound["lineage"]["checkpoint_id"]
+        bound["turn_obligation_sha256"] = domain_sha256(
+            "turn-obligation", {k: v for k, v in bound.items() if k != "turn_obligation_sha256"}
+        )
+        with self.assertRaisesRegex(LifecycleContractError, "missing fields"):
+            validate_turn_obligation(bound)
+
+    def test_unbound_ordinary_ingress_closes_with_persistence_only_evidence(self):
+        closed = advance_turn_obligation(
+            self.obligation(),
+            state="closed",
+            recorded_at="2026-01-01T00:01:00+00:00",
+            advance_source="engine",
+            closure_evidence=terminal_evidence(),
+            objective_status="completed",
+        )
+        self.assertEqual(closed.lineage["lineage_mode"], "ordinary_ingress")
+        self.assertTrue(closed.turn_closed)
+        self.assertEqual(closed.responsibility_state, "none")
+        self.assertEqual(closed.objective_status, "completed")
+        self.assertFalse(closed.closure_evidence["delivery_claimed"])
+        self.assertFalse(closed.closure_evidence["human_observation_claimed"])
+
+    def test_bind_to_checkpoint_is_one_monotonic_cas_transition(self):
+        initial = self.obligation()
+        waiting = bind_turn_obligation(
+            initial,
+            recorded_at="2026-01-01T00:01:00+00:00",
+            closure_evidence=checkpoint_evidence(),
+        )
+        self.assertEqual(waiting.lineage["lineage_mode"], "bound")
+        self.assertEqual(waiting.intent_id, U["intent"])
+        self.assertEqual(waiting.checkpoint_id, U["checkpoint"])
+        self.assertEqual(waiting.generation, initial.generation + 1)
+        self.assertEqual(waiting.previous_record_sha256, initial.turn_obligation_sha256)
+        self.assertEqual(waiting.state, "waiting")
+
+    def test_bind_to_intent_closes_with_handoff_responsibility(self):
+        handed = bind_turn_obligation(
+            self.obligation(),
+            recorded_at="2026-01-01T00:01:00+00:00",
+            closure_evidence=handoff_evidence(),
+        )
+        self.assertEqual(handed.lineage["lineage_mode"], "bound")
+        self.assertEqual(handed.state, "handed_off")
+        self.assertEqual(handed.responsibility_state, "handed_off")
+        self.assertEqual(handed.objective_status, "incomplete")
+
+    def test_bound_lineage_is_immutable_and_cannot_rebind(self):
+        with self.assertRaisesRegex(LifecycleConflictError, "already bound"):
+            bind_turn_obligation(
+                self.bound_waiting(),
+                recorded_at="2026-01-01T00:02:00+00:00",
+                closure_evidence={
+                    **checkpoint_evidence(at="2026-01-01T00:02:00+00:00"),
+                    "intent_id": U["intent_2"],
+                    "checkpoint_id": U["checkpoint_2"],
+                    "checkpoint_sha256": H["checkpoint_2"],
+                },
             )
 
-    def test_protocol_reflex_advances_same_obligation_and_phase(self):
-        waiting = advance_turn_obligation(
-            self.obligation(), state="waiting", recorded_at="2026-01-01T00:01:00+00:00",
-            advance_source="deterministic_policy",
-            closure_evidence={"evidence_type": "checkpoint_planted", "checkpoint_id": U["checkpoint"], "checkpoint_sha256": H["checkpoint"], "planted_at": "2026-01-01T00:01:00+00:00"},
+        active = self.bound_active()
+        closed = advance_turn_obligation(
+            active,
+            state="closed",
+            recorded_at="2026-01-01T00:03:00+00:00",
+            advance_source="engine",
+            closure_evidence=terminal_evidence(at="2026-01-01T00:03:00+00:00"),
+        ).to_document()
+        closed["lineage"]["intent_id"] = U["intent_2"]
+        closed["turn_obligation_sha256"] = domain_sha256(
+            "turn-obligation", {k: v for k, v in closed.items() if k != "turn_obligation_sha256"}
         )
+        with self.assertRaisesRegex(LifecycleConflictError, "cannot be rebound"):
+            validate_turn_transition(active.to_document(), closed)
+
+    def test_stale_cas_is_rejected(self):
+        current = advance_turn_obligation(
+            self.obligation(),
+            state="active",
+            recorded_at="2026-01-01T00:01:00+00:00",
+            advance_source="engine",
+        ).to_document()
+        current["generation"] = 5
+        current["turn_obligation_sha256"] = domain_sha256(
+            "turn-obligation", {k: v for k, v in current.items() if k != "turn_obligation_sha256"}
+        )
+        with self.assertRaisesRegex(LifecycleConflictError, "CAS"):
+            validate_turn_transition(self.obligation().to_document(), current)
+
+    def test_protocol_reflex_rejects_unbound_obligation(self):
+        with self.assertRaisesRegex(LifecycleContractError, "requires an already bound obligation"):
+            advance_turn_obligation(
+                self.obligation(),
+                state="active",
+                recorded_at="2026-01-01T00:01:00+00:00",
+                advance_source="protocol_reflex",
+            )
+
+    def test_protocol_reflex_advances_same_bound_obligation_and_phase(self):
+        waiting = self.bound_waiting()
         active = advance_turn_obligation(
-            waiting, state="active", recorded_at="2026-01-01T00:02:00+00:00", advance_source="protocol_reflex"
+            waiting,
+            state="active",
+            recorded_at="2026-01-01T00:02:00+00:00",
+            advance_source="protocol_reflex",
         )
         self.assertEqual(active.obligation_id, waiting.obligation_id)
+        self.assertEqual(active.lineage, waiting.lineage)
         self.assertEqual(active.phase_generation, waiting.phase_generation + 1)
         self.assertEqual(active.generation, waiting.generation + 1)
         child = active.to_document()
@@ -234,44 +349,75 @@ class CanonicalAndTurnTests(LifecycleFixture):
         with self.assertRaises(LifecycleConflictError):
             validate_turn_transition(waiting.to_document(), child)
 
-    def test_turn_transition_rejects_stale_generation_and_illegal_reflex(self):
-        with self.assertRaisesRegex(LifecycleContractError, "protocol_reflex"):
-            advance_turn_obligation(
-                self.obligation(), state="active", recorded_at="2026-01-01T00:01:00+00:00", advance_source="protocol_reflex"
-            )
-        current = advance_turn_obligation(
-            self.obligation(), state="active", recorded_at="2026-01-01T00:01:00+00:00", advance_source="deterministic_policy"
-        ).to_document()
-        current["generation"] = 5
-        current["turn_obligation_sha256"] = domain_sha256(
-            "turn-obligation", {k: v for k, v in current.items() if k != "turn_obligation_sha256"}
-        )
-        with self.assertRaisesRegex(LifecycleConflictError, "CAS"):
-            validate_turn_transition(self.obligation().to_document(), current)
+    def test_hash_tamper_is_rejected(self):
+        tampered = self.obligation().to_document()
+        tampered["lineage"]["ingress"]["projection_sha256"] = "f" * 64
+        with self.assertRaisesRegex(LifecycleContractError, "hash mismatch"):
+            validate_turn_obligation(tampered)
 
-    def test_closure_evidence_must_bind_checkpoint_and_not_postdate_record(self):
-        wrong_checkpoint = {
-            "evidence_type": "checkpoint_planted",
-            "checkpoint_id": U["authorization"],
-            "checkpoint_sha256": H["checkpoint"],
-            "planted_at": "2026-01-01T00:01:00+00:00",
-        }
-        with self.assertRaisesRegex(LifecycleContractError, "bind the obligation checkpoint"):
+    def test_all_five_closure_evidence_variants_remain_typed(self):
+        waiting = self.bound_waiting()
+        active = self.bound_active()
+        awaiting = advance_turn_obligation(
+            self.obligation(),
+            state="awaiting_human",
+            recorded_at="2026-01-01T00:01:00+00:00",
+            advance_source="engine",
+            closure_evidence={
+                "evidence_type": "human_gate_reached",
+                "gate_id": U["gate"],
+                "reason_code": "authority_required",
+                "reached_at": "2026-01-01T00:01:00+00:00",
+                "human_observation_claimed": False,
+            },
+        )
+        reconciling = advance_turn_obligation(
+            active,
+            state="reconciling",
+            recorded_at="2026-01-01T00:03:00+00:00",
+            advance_source="deterministic_policy",
+            closure_evidence={
+                "evidence_type": "reconciliation_claimed",
+                "claim_id": U["reconcile"],
+                "execution_result_id": U["result"],
+                "claimed_at": "2026-01-01T00:03:00+00:00",
+            },
+        )
+        closed = advance_turn_obligation(
+            self.obligation(),
+            state="closed",
+            recorded_at="2026-01-01T00:01:00+00:00",
+            advance_source="engine",
+            closure_evidence=terminal_evidence(),
+        )
+        handed = bind_turn_obligation(
+            self.obligation(),
+            recorded_at="2026-01-01T00:01:00+00:00",
+            closure_evidence=handoff_evidence(),
+        )
+        self.assertEqual(
+            {item.closure_evidence["evidence_type"] for item in (waiting, awaiting, handed, reconciling, closed)},
+            {"checkpoint_planted", "human_gate_reached", "handed_off_to_intent", "reconciliation_claimed", "terminal_response_emitted"},
+        )
+
+    def test_message_persistence_cannot_claim_delivery_or_observation(self):
+        evidence = terminal_evidence()
+        evidence["delivery_claimed"] = True
+        with self.assertRaisesRegex(LifecycleContractError, "cannot claim delivery"):
             advance_turn_obligation(
-                self.obligation(), state="waiting", recorded_at="2026-01-01T00:01:00+00:00",
-                advance_source="deterministic_policy", closure_evidence=wrong_checkpoint,
+                self.obligation(),
+                state="closed",
+                recorded_at="2026-01-01T00:01:00+00:00",
+                advance_source="engine",
+                closure_evidence=evidence,
             )
-        future_gate = {
-            "evidence_type": "human_gate_reached",
-            "gate_id": U["gate"],
-            "reason_code": "authority_required",
-            "reached_at": "2026-01-01T00:02:00+00:00",
-            "human_observation_claimed": False,
-        }
+
+    def test_binding_evidence_must_not_postdate_record(self):
         with self.assertRaisesRegex(LifecycleContractError, "cannot postdate"):
-            advance_turn_obligation(
-                self.obligation(), state="awaiting_human", recorded_at="2026-01-01T00:01:00+00:00",
-                advance_source="deterministic_policy", closure_evidence=future_gate,
+            bind_turn_obligation(
+                self.obligation(),
+                recorded_at="2026-01-01T00:01:00+00:00",
+                closure_evidence=checkpoint_evidence(at="2026-01-01T00:02:00+00:00"),
             )
 
 
@@ -465,6 +611,59 @@ class SchemaContractTests(unittest.TestCase):
                 self.assertEqual(schema["properties"]["record_type"]["const"], record_type)
         lifecycle = sorted(path.name for path in (ROOT / "schemas").glob("*.schema.json") if path.name in expected)
         self.assertEqual(lifecycle, sorted(expected))
+
+    @unittest.skipUnless(jsonschema is not None, "jsonschema is not installed in the task runtime")
+    def test_turn_schema_accepts_both_lineage_branches_and_reflex_record(self):
+        schema = json.loads((ROOT / "schemas" / "turn-obligation.schema.json").read_text(encoding="utf-8"))
+        validator = jsonschema.Draft202012Validator(schema, format_checker=jsonschema.FormatChecker())
+        fixture = LifecycleFixture(methodName="runTest")
+        records = (
+            fixture.obligation().to_document(),
+            advance_turn_obligation(
+                fixture.obligation(),
+                state="closed",
+                recorded_at="2026-01-01T00:01:00+00:00",
+                advance_source="engine",
+                closure_evidence=terminal_evidence(),
+            ).to_document(),
+            fixture.bound_waiting().to_document(),
+            bind_turn_obligation(
+                fixture.obligation(),
+                recorded_at="2026-01-01T00:01:00+00:00",
+                closure_evidence=handoff_evidence(),
+            ).to_document(),
+            fixture.bound_active().to_document(),
+        )
+        for record in records:
+            with self.subTest(state=record["state"], lineage_mode=record["lineage"]["lineage_mode"]):
+                validator.validate(record)
+
+    @unittest.skipUnless(jsonschema is not None, "jsonschema is not installed in the task runtime")
+    def test_turn_schema_rejects_partial_lineage_and_unknown_properties(self):
+        schema = json.loads((ROOT / "schemas" / "turn-obligation.schema.json").read_text(encoding="utf-8"))
+        validator = jsonschema.Draft202012Validator(schema, format_checker=jsonschema.FormatChecker())
+        fixture = LifecycleFixture(methodName="runTest")
+        invalid = []
+
+        partial = fixture.obligation().to_document()
+        partial["lineage"]["intent_id"] = U["intent"]
+        invalid.append(partial)
+
+        missing_bound_field = fixture.bound_waiting().to_document()
+        del missing_bound_field["lineage"]["checkpoint_id"]
+        invalid.append(missing_bound_field)
+
+        unknown_root = fixture.obligation().to_document()
+        unknown_root["unexpected"] = True
+        invalid.append(unknown_root)
+
+        unknown_ingress = fixture.obligation().to_document()
+        unknown_ingress["lineage"]["ingress"]["unexpected"] = True
+        invalid.append(unknown_ingress)
+
+        for record in invalid:
+            with self.subTest(record=record):
+                self.assertTrue(list(validator.iter_errors(record)))
 
     def test_fixture_bytes_are_repeatable(self):
         fixture = LifecycleFixture(methodName="runTest")

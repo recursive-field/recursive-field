@@ -21,6 +21,7 @@ from typing import Any, Mapping, Sequence
 from continuation_schema import canonical_json_bytes, parse_timestamp
 
 SCHEMA_VERSION = "1.0.0"
+TURN_SCHEMA_VERSION = "1.1.0"
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 OPAQUE_MAX = 256
 
@@ -181,7 +182,7 @@ def _closure_evidence(value: Any) -> dict[str, Any] | None:
     kind = value.get("evidence_type")
     variants = {
         "terminal_response_emitted": {"evidence_type", "message_ref", "persisted_at", "delivery_claimed", "human_observation_claimed"},
-        "checkpoint_planted": {"evidence_type", "checkpoint_id", "checkpoint_sha256", "planted_at"},
+        "checkpoint_planted": {"evidence_type", "intent_id", "checkpoint_id", "checkpoint_sha256", "planted_at"},
         "human_gate_reached": {"evidence_type", "gate_id", "reason_code", "reached_at", "human_observation_claimed"},
         "handed_off_to_intent": {"evidence_type", "intent_id", "checkpoint_id", "checkpoint_sha256", "handed_off_at"},
         "reconciliation_claimed": {"evidence_type", "claim_id", "execution_result_id", "claimed_at"},
@@ -201,7 +202,8 @@ def _closure_evidence(value: Any) -> dict[str, Any] | None:
         _bounded_string(value["message_ref"], "closure_evidence.message_ref")
         if value["delivery_claimed"] is not False or value["human_observation_claimed"] is not False:
             raise LifecycleContractError("message persistence cannot claim delivery or human observation")
-    elif kind == "checkpoint_planted":
+    elif kind in {"checkpoint_planted", "handed_off_to_intent"}:
+        _uuid(value["intent_id"], "closure_evidence.intent_id")
         _uuid(value["checkpoint_id"], "closure_evidence.checkpoint_id")
         _sha256(value["checkpoint_sha256"], "closure_evidence.checkpoint_sha256")
     elif kind == "human_gate_reached":
@@ -209,24 +211,65 @@ def _closure_evidence(value: Any) -> dict[str, Any] | None:
         _bounded_string(value["reason_code"], "closure_evidence.reason_code", maximum=128)
         if value["human_observation_claimed"] is not False:
             raise LifecycleContractError("human gate persistence cannot claim human observation")
-    elif kind == "handed_off_to_intent":
-        _uuid(value["intent_id"], "closure_evidence.intent_id")
-        _uuid(value["checkpoint_id"], "closure_evidence.checkpoint_id")
-        _sha256(value["checkpoint_sha256"], "closure_evidence.checkpoint_sha256")
     else:
         _uuid(value["claim_id"], "closure_evidence.claim_id")
         _uuid(value["execution_result_id"], "closure_evidence.execution_result_id")
     return copy.deepcopy(dict(value))
 
 
+def _validate_ingress_anchor(value: Any) -> dict[str, Any]:
+    if not isinstance(value, Mapping):
+        raise LifecycleContractError("lineage.ingress must be an object")
+    _exact_keys(
+        value,
+        {"ingress_id", "ingress_sha256", "projection_sha256", "ingressed_at", "ingress_identity"},
+        "lineage.ingress",
+    )
+    _uuid(value["ingress_id"], "lineage.ingress.ingress_id")
+    _sha256(value["ingress_sha256"], "lineage.ingress.ingress_sha256")
+    _sha256(value["projection_sha256"], "lineage.ingress.projection_sha256")
+    _timestamp(value["ingressed_at"], "lineage.ingress.ingressed_at")
+    _bounded_string(value["ingress_identity"], "lineage.ingress.ingress_identity")
+    return copy.deepcopy(dict(value))
+
+
+def _validate_turn_lineage(value: Any) -> dict[str, Any]:
+    if not isinstance(value, Mapping):
+        raise LifecycleContractError("lineage must be an object")
+    mode = value.get("lineage_mode")
+    common = {"lineage_mode", "field_genesis_uuid", "context_id", "ingress"}
+    if mode == "ordinary_ingress":
+        _exact_keys(value, common, "ordinary_ingress lineage")
+    elif mode == "bound":
+        _exact_keys(
+            value,
+            common | {"intent_id", "checkpoint_id", "checkpoint_sha256", "bound_at"},
+            "bound lineage",
+        )
+        _uuid(value["intent_id"], "lineage.intent_id")
+        _uuid(value["checkpoint_id"], "lineage.checkpoint_id")
+        _sha256(value["checkpoint_sha256"], "lineage.checkpoint_sha256")
+        _timestamp(value["bound_at"], "lineage.bound_at")
+    else:
+        raise LifecycleContractError("unsupported turn lineage_mode")
+    _uuid(value["field_genesis_uuid"], "lineage.field_genesis_uuid")
+    _bounded_string(value["context_id"], "lineage.context_id")
+    _validate_ingress_anchor(value["ingress"])
+    return copy.deepcopy(dict(value))
+
+
+def _turn_anchor(lineage: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "field_genesis_uuid": lineage["field_genesis_uuid"],
+        "context_id": lineage["context_id"],
+        "ingress": copy.deepcopy(lineage["ingress"]),
+    }
+
+
 @dataclass(frozen=True)
 class TurnObligation:
     obligation_id: str
-    field_genesis_uuid: str
-    context_id: str
-    intent_id: str
-    checkpoint_id: str
-    checkpoint_sha256: str
+    lineage: Mapping[str, Any]
     generation: int
     phase_generation: int
     advance_source: str
@@ -239,16 +282,35 @@ class TurnObligation:
     previous_record_sha256: str | None
     turn_obligation_sha256: str
 
+    @property
+    def field_genesis_uuid(self) -> str:
+        return str(self.lineage["field_genesis_uuid"])
+
+    @property
+    def context_id(self) -> str:
+        return str(self.lineage["context_id"])
+
+    @property
+    def intent_id(self) -> str | None:
+        value = self.lineage.get("intent_id")
+        return str(value) if value is not None else None
+
+    @property
+    def checkpoint_id(self) -> str | None:
+        value = self.lineage.get("checkpoint_id")
+        return str(value) if value is not None else None
+
+    @property
+    def checkpoint_sha256(self) -> str | None:
+        value = self.lineage.get("checkpoint_sha256")
+        return str(value) if value is not None else None
+
     def to_document(self) -> dict[str, Any]:
         return {
-            "schema_version": SCHEMA_VERSION,
+            "schema_version": TURN_SCHEMA_VERSION,
             "record_type": "turn_obligation",
             "obligation_id": self.obligation_id,
-            "field_genesis_uuid": self.field_genesis_uuid,
-            "context_id": self.context_id,
-            "intent_id": self.intent_id,
-            "checkpoint_id": self.checkpoint_id,
-            "checkpoint_sha256": self.checkpoint_sha256,
+            "lineage": copy.deepcopy(dict(self.lineage)),
             "generation": self.generation,
             "phase_generation": self.phase_generation,
             "advance_source": self.advance_source,
@@ -273,21 +335,30 @@ def build_turn_obligation(
     obligation_id: str,
     field_genesis_uuid: str,
     context_id: str,
-    intent_id: str,
-    checkpoint_id: str,
-    checkpoint_sha256: str,
+    ingress_id: str,
+    ingress_sha256: str,
+    projection_sha256: str,
+    ingressed_at: str,
+    ingress_identity: str,
     recorded_at: str,
 ) -> TurnObligation:
     document = _sealed(
         {
-            "schema_version": SCHEMA_VERSION,
+            "schema_version": TURN_SCHEMA_VERSION,
             "record_type": "turn_obligation",
             "obligation_id": obligation_id,
-            "field_genesis_uuid": field_genesis_uuid,
-            "context_id": context_id,
-            "intent_id": intent_id,
-            "checkpoint_id": checkpoint_id,
-            "checkpoint_sha256": checkpoint_sha256,
+            "lineage": {
+                "lineage_mode": "ordinary_ingress",
+                "field_genesis_uuid": field_genesis_uuid,
+                "context_id": context_id,
+                "ingress": {
+                    "ingress_id": ingress_id,
+                    "ingress_sha256": ingress_sha256,
+                    "projection_sha256": projection_sha256,
+                    "ingressed_at": ingressed_at,
+                    "ingress_identity": ingress_identity,
+                },
+            },
             "generation": 1,
             "phase_generation": 0,
             "advance_source": "user_ingress",
@@ -305,16 +376,16 @@ def build_turn_obligation(
     return TurnObligation.from_document(document)
 
 
-def advance_turn_obligation(
-    previous: TurnObligation | Mapping[str, Any],
+def _advanced_turn_document(
+    old: Mapping[str, Any],
     *,
+    lineage: Mapping[str, Any],
     state: str,
     recorded_at: str,
     advance_source: str,
-    closure_evidence: Mapping[str, Any] | None = None,
-    objective_status: str = "incomplete",
-) -> TurnObligation:
-    old = previous.to_document() if isinstance(previous, TurnObligation) else validate_turn_obligation(previous)
+    closure_evidence: Mapping[str, Any] | None,
+    objective_status: str,
+) -> dict[str, Any]:
     semantics = {
         "open": (False, "retained"),
         "active": (False, "retained"),
@@ -327,12 +398,14 @@ def advance_turn_obligation(
     if state not in semantics:
         raise LifecycleContractError(f"unsupported turn state: {state!r}")
     turn_closed, responsibility = semantics[state]
-    phase_generation = old["phase_generation"] + (1 if advance_source == "protocol_reflex" else 0)
-    document = _sealed(
+    return _sealed(
         {
-            **{key: old[key] for key in ("schema_version", "record_type", "obligation_id", "field_genesis_uuid", "context_id", "intent_id", "checkpoint_id", "checkpoint_sha256")},
+            "schema_version": TURN_SCHEMA_VERSION,
+            "record_type": "turn_obligation",
+            "obligation_id": old["obligation_id"],
+            "lineage": copy.deepcopy(dict(lineage)),
             "generation": old["generation"] + 1,
-            "phase_generation": phase_generation,
+            "phase_generation": old["phase_generation"] + (1 if advance_source == "protocol_reflex" else 0),
             "advance_source": advance_source,
             "state": state,
             "turn_closed": turn_closed,
@@ -345,27 +418,81 @@ def advance_turn_obligation(
         "turn_obligation_sha256",
         "turn-obligation",
     )
+
+
+def advance_turn_obligation(
+    previous: TurnObligation | Mapping[str, Any],
+    *,
+    state: str,
+    recorded_at: str,
+    advance_source: str,
+    closure_evidence: Mapping[str, Any] | None = None,
+    objective_status: str = "incomplete",
+) -> TurnObligation:
+    old = previous.to_document() if isinstance(previous, TurnObligation) else validate_turn_obligation(previous)
+    if old["lineage"]["lineage_mode"] == "ordinary_ingress" and state in {"waiting", "handed_off", "reconciling"}:
+        raise LifecycleContractError("unbound ordinary ingress must use bind_turn_obligation before authority-bearing closure")
+    document = _advanced_turn_document(
+        old,
+        lineage=old["lineage"],
+        state=state,
+        recorded_at=recorded_at,
+        advance_source=advance_source,
+        closure_evidence=closure_evidence,
+        objective_status=objective_status,
+    )
+    validate_turn_transition(old, document)
+    return TurnObligation.from_document(document)
+
+
+def bind_turn_obligation(
+    previous: TurnObligation | Mapping[str, Any],
+    *,
+    recorded_at: str,
+    closure_evidence: Mapping[str, Any],
+) -> TurnObligation:
+    old = previous.to_document() if isinstance(previous, TurnObligation) else validate_turn_obligation(previous)
+    if old["lineage"]["lineage_mode"] != "ordinary_ingress":
+        raise LifecycleConflictError("turn obligation lineage is already bound and cannot be rebound")
+    evidence = _closure_evidence(closure_evidence)
+    if evidence is None or evidence["evidence_type"] not in {"checkpoint_planted", "handed_off_to_intent"}:
+        raise LifecycleContractError("lineage binding requires checkpoint_planted or handed_off_to_intent evidence")
+    state = "waiting" if evidence["evidence_type"] == "checkpoint_planted" else "handed_off"
+    lineage = {
+        **_turn_anchor(old["lineage"]),
+        "lineage_mode": "bound",
+        "intent_id": evidence["intent_id"],
+        "checkpoint_id": evidence["checkpoint_id"],
+        "checkpoint_sha256": evidence["checkpoint_sha256"],
+        "bound_at": recorded_at,
+    }
+    document = _advanced_turn_document(
+        old,
+        lineage=lineage,
+        state=state,
+        recorded_at=recorded_at,
+        advance_source="formation",
+        closure_evidence=evidence,
+        objective_status="incomplete",
+    )
     validate_turn_transition(old, document)
     return TurnObligation.from_document(document)
 
 
 def validate_turn_obligation(document: Mapping[str, Any]) -> dict[str, Any]:
     required = {
-        "schema_version", "record_type", "obligation_id", "field_genesis_uuid", "context_id", "intent_id",
-        "checkpoint_id", "checkpoint_sha256", "generation", "phase_generation", "advance_source", "state",
-        "turn_closed", "responsibility_state", "objective_status", "closure_evidence", "recorded_at",
-        "previous_record_sha256", "turn_obligation_sha256",
+        "schema_version", "record_type", "obligation_id", "lineage", "generation", "phase_generation",
+        "advance_source", "state", "turn_closed", "responsibility_state", "objective_status",
+        "closure_evidence", "recorded_at", "previous_record_sha256", "turn_obligation_sha256",
     }
     _exact_keys(document, required, "turn_obligation")
-    if document["schema_version"] != SCHEMA_VERSION or document["record_type"] != "turn_obligation":
+    if document["schema_version"] != TURN_SCHEMA_VERSION or document["record_type"] != "turn_obligation":
         raise LifecycleContractError("turn obligation tag/version mismatch")
-    for field in ("obligation_id", "field_genesis_uuid", "intent_id", "checkpoint_id"):
-        _uuid(document[field], field)
-    _bounded_string(document["context_id"], "context_id")
-    _sha256(document["checkpoint_sha256"], "checkpoint_sha256")
+    _uuid(document["obligation_id"], "obligation_id")
+    lineage = _validate_turn_lineage(document["lineage"])
     generation = _positive_int(document["generation"], "generation")
     _positive_int(document["phase_generation"], "phase_generation", allow_zero=True)
-    if document["advance_source"] not in {"user_ingress", "protocol_reflex", "deterministic_policy", "human"}:
+    if document["advance_source"] not in {"user_ingress", "engine", "protocol_reflex", "formation", "deterministic_policy", "human"}:
         raise LifecycleContractError("unsupported advance_source")
     state = document["state"]
     if state not in TURN_TRANSITIONS:
@@ -378,11 +505,20 @@ def validate_turn_obligation(document: Mapping[str, Any]) -> dict[str, Any]:
         raise LifecycleContractError("turn_closed must be boolean")
     evidence = _closure_evidence(document["closure_evidence"])
     recorded_at = _timestamp(document["recorded_at"], "recorded_at")
+    if _timestamp(lineage["ingress"]["ingressed_at"], "lineage.ingress.ingressed_at") > recorded_at:
+        raise LifecycleContractError("ingress timestamp cannot postdate its obligation record")
+    if lineage["lineage_mode"] == "bound" and _timestamp(lineage["bound_at"], "lineage.bound_at") > recorded_at:
+        raise LifecycleContractError("lineage binding cannot postdate its obligation record")
     if generation == 1:
         if document["previous_record_sha256"] is not None:
             raise LifecycleContractError("initial obligation cannot name a predecessor")
-        if document["phase_generation"] != 0 or document["advance_source"] != "user_ingress" or state != "open":
-            raise LifecycleContractError("initial obligation must be open user ingress at phase_generation 0")
+        if (
+            document["phase_generation"] != 0
+            or document["advance_source"] != "user_ingress"
+            or state != "open"
+            or lineage["lineage_mode"] != "ordinary_ingress"
+        ):
+            raise LifecycleContractError("initial obligation must be unbound open user ingress at phase_generation 0")
     else:
         _sha256(document["previous_record_sha256"], "previous_record_sha256")
     expected = {
@@ -397,6 +533,8 @@ def validate_turn_obligation(document: Mapping[str, Any]) -> dict[str, Any]:
     evidence_type = evidence["evidence_type"] if evidence is not None else None
     if (document["turn_closed"], document["responsibility_state"], evidence_type) != expected:
         raise LifecycleContractError("turn state, closure, responsibility, and evidence are inconsistent")
+    if state in {"waiting", "handed_off", "reconciling"} and lineage["lineage_mode"] != "bound":
+        raise LifecycleContractError(f"{state} turn state requires bound lineage")
     if evidence is not None:
         evidence_time_field = {
             "terminal_response_emitted": "persisted_at",
@@ -407,20 +545,18 @@ def validate_turn_obligation(document: Mapping[str, Any]) -> dict[str, Any]:
         }[evidence_type]
         if _timestamp(evidence[evidence_time_field], f"closure_evidence.{evidence_time_field}") > recorded_at:
             raise LifecycleContractError("closure evidence cannot postdate its obligation record")
-        if evidence_type == "checkpoint_planted" and (
-            evidence["checkpoint_id"] != document["checkpoint_id"]
-            or evidence["checkpoint_sha256"] != document["checkpoint_sha256"]
+        if evidence_type in {"checkpoint_planted", "handed_off_to_intent"} and (
+            evidence["intent_id"] != lineage.get("intent_id")
+            or evidence["checkpoint_id"] != lineage.get("checkpoint_id")
+            or evidence["checkpoint_sha256"] != lineage.get("checkpoint_sha256")
         ):
-            raise LifecycleContractError("checkpoint closure evidence must bind the obligation checkpoint")
-        if evidence_type == "handed_off_to_intent" and (
-            evidence["intent_id"] != document["intent_id"]
-            or evidence["checkpoint_id"] != document["checkpoint_id"]
-            or evidence["checkpoint_sha256"] != document["checkpoint_sha256"]
-        ):
-            raise LifecycleContractError("handoff evidence must bind the obligation intent and checkpoint")
+            raise LifecycleContractError("formation closure evidence must bind the obligation lineage")
     if state != "closed" and document["objective_status"] != "incomplete":
         raise LifecycleContractError("only a closed turn may declare objective completion or cancellation")
-    expected_hash = domain_sha256("turn-obligation", {key: copy.deepcopy(value) for key, value in document.items() if key != "turn_obligation_sha256"})
+    expected_hash = domain_sha256(
+        "turn-obligation",
+        {key: copy.deepcopy(value) for key, value in document.items() if key != "turn_obligation_sha256"},
+    )
     if document["turn_obligation_sha256"] != expected_hash:
         raise LifecycleContractError("turn obligation hash mismatch")
     return copy.deepcopy(dict(document))
@@ -429,16 +565,37 @@ def validate_turn_obligation(document: Mapping[str, Any]) -> dict[str, Any]:
 def validate_turn_transition(previous: Mapping[str, Any], current: Mapping[str, Any]) -> None:
     old = validate_turn_obligation(previous)
     new = validate_turn_obligation(current)
-    immutable = ("obligation_id", "field_genesis_uuid", "context_id", "intent_id", "checkpoint_id", "checkpoint_sha256")
-    if any(old[field] != new[field] for field in immutable):
-        raise LifecycleConflictError("turn transition changed immutable identity")
+    if old["obligation_id"] != new["obligation_id"]:
+        raise LifecycleConflictError("turn transition changed immutable obligation identity")
+    if _turn_anchor(old["lineage"]) != _turn_anchor(new["lineage"]):
+        raise LifecycleConflictError("turn transition changed immutable ingress anchor")
     if new["generation"] != old["generation"] + 1 or new["previous_record_sha256"] != old["turn_obligation_sha256"]:
         raise LifecycleConflictError("turn transition violates strict CAS generation")
     if _timestamp(new["recorded_at"], "recorded_at") <= _timestamp(old["recorded_at"], "previous.recorded_at"):
         raise LifecycleContractError("turn transition time must strictly increase")
     if new["state"] not in TURN_TRANSITIONS[old["state"]]:
         raise LifecycleContractError(f"turn transition {old['state']} -> {new['state']} is not allowed")
+
+    old_mode = old["lineage"]["lineage_mode"]
+    new_mode = new["lineage"]["lineage_mode"]
+    if old_mode == "bound":
+        if new["lineage"] != old["lineage"]:
+            raise LifecycleConflictError("bound turn lineage is immutable and cannot be rebound")
+    elif new_mode == "bound":
+        if new["advance_source"] != "formation" or new["state"] not in {"waiting", "handed_off"}:
+            raise LifecycleContractError("ordinary ingress may bind only through a formation closure transition")
+        if new["lineage"]["bound_at"] != new["recorded_at"]:
+            raise LifecycleContractError("lineage bound_at must equal the binding record timestamp")
+        evidence = new["closure_evidence"]
+        expected_type = "checkpoint_planted" if new["state"] == "waiting" else "handed_off_to_intent"
+        if not isinstance(evidence, Mapping) or evidence.get("evidence_type") != expected_type:
+            raise LifecycleContractError("lineage binding evidence does not match the binding state")
+    elif new_mode != "ordinary_ingress":
+        raise LifecycleContractError("unsupported lineage transition")
+
     if new["advance_source"] == "protocol_reflex":
+        if old_mode != "bound" or new_mode != "bound":
+            raise LifecycleContractError("protocol_reflex requires an already bound obligation")
         if old["state"] != "waiting" or new["state"] != "active":
             raise LifecycleContractError("protocol_reflex may only advance a waiting obligation")
         if new["phase_generation"] != old["phase_generation"] + 1:

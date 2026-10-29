@@ -33,7 +33,7 @@ When `KNOWLEDGE_DIR=state/knowledge/recursive_field`, the formation's assembled 
 | `delegate_task.py` | Capability-gated task delegation — `task_dispatched` → `task_delegated` → `task_received` → `task_result` across mesh queues |
 | `consume_queue.py` | Bounded asynchronous recipient execution — validates envelopes, claims one allowlisted task, authors results, advances a durable cursor, and persists state |
 | `continuation_schema.py` | Formation-owned continuation constructors and strict schema/hash/transition/lease/effect-boundary validation with atomic and immutable writes |
-| `lifecycle_contracts.py` | Pure three-record lifecycle contracts for turn closure/handoff, deterministic authorization, and execution-result evidence; no live-state evaluation or actuation |
+| `lifecycle_contracts.py` | Pure three-record lifecycle contracts; turn obligations use closed unbound-ingress/bound lineage, immutable CAS binding, and bound-only protocol reflex, while authorization/result contracts remain non-actuating |
 | `resume_thread.py` | Read-only seven-way continuation classifier with sequence, boot identity, security, evidence, and reconciliation checks |
 | `checkpoint_intent.py` | Explicit arming and immutable checkpoint recording with per-intent locking and compare-and-swap head advancement |
 | `continuation_reflex.py` | Formation-owned immutable system-protocol request, claim, and `continuation_reflex_fired` contracts; authenticated plugin dispatch delegates to the engine-owned typed continuation primitive |
