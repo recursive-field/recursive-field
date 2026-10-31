@@ -114,6 +114,7 @@ KNOWLEDGE_DIR=state/knowledge/urban_ops     # Urban Operations intelligence
 | `consume_queue.py` | Bounded async worker with durable cursor, atomic claims, and allowlisted execution |
 | `continuation_schema.py` | Canonical JSON, embedded-hash validation, schema checks, and atomic continuation writes |
 | `lifecycle_contracts.py` | Pure dataclasses and validators for turn obligations, deterministic execution authorization, and execution-result lifecycles |
+| `turn_obligation_adapter.py` | Recursive Field schema 1.1.0 adapter for Agent Zero’s generic chat-local obligation persistence owner |
 | `resume_thread.py` | Read-only continuation eligibility classifier; only `--dry-run` is supported |
 | `checkpoint_intent.py` | Explicit arming plus immutable, lock-serialized checkpoint creation and CAS intent-head advancement |
 | `continuation_reflex.py` | Formation-owned immutable continuation request/claim/receipt handoff; engine actuation occurs only through the authenticated typed-turn plugin bridge |
@@ -269,6 +270,15 @@ human observation. `protocol_reflex` rejects unbound anchors and advances the
 same bound waiting obligation with one `phase_generation` increment rather
 than spawning a child.
 
+`turn_obligation_adapter.py` is the non-actuating semantic boundary consumed by
+Agent Zero's generic persistence owner. Agent Zero owns per-chat locks,
+create-only generations, atomic heads, and file/directory fsync; Recursive Field
+owns schema 1.1.0 validation, field-genesis binding, typed handoff semantics, and
+protocol-reflex anti-recursion. Tracked installation source lives under
+`agent_zero_extensions/turn_obligation_contract/`; it is not active under
+`.a0proj` in this checkout. Ordinary Agent Zero behavior remains unchanged when
+no adapter is installed.
+
 `execution_authorization` is immutable authority minted only by deterministic
 policy for the versioned MVP adapter registry. Its operational digest binds the
 adapter, canonical payload, target and actor, root-relative durable security
@@ -290,7 +300,7 @@ Docker starts auto-restarted bind-mounted containers. A missing mount cannot
 silently fall back to the root-disk directory. See
 [`systemd/README.md`](systemd/README.md) for substitutions, validation,
 installation, recovery, and rollback. These unit templates do not change the
-23-script/module inventory.
+24-script/module inventory.
 
 ---
 

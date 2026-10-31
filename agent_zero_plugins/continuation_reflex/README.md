@@ -10,13 +10,14 @@ The bridge calls `AgentContext.continuation_turn()` in process. The engine primi
 
 - resolves an existing live context and existing durable chat coordinate only;
 - requires an idle context for initial dispatch;
-- reserves an engine-owned receipt before inference;
+- resolves a unique existing bound waiting turn obligation through the framework's project-adapter boundary;
+- reserves an engine-owned receipt, then CAS-advances that same obligation and increments `phase_generation` before inference without creating a child obligation;
 - projects hash-bound protocol as `SystemMessage` material without `UserMessage`, `hist_add_user_message`, `communicate()`, or `monologue()`;
 - makes exactly one model invocation with tools disabled and transport retries set to zero;
-- persists only the assistant result on unambiguous completion;
+- persists only the assistant result on unambiguous completion, then closes the same obligation with local-persistence-only `terminal_response_emitted` evidence;
 - records immutable `completed`, `failed`, `cancelled`, or `ambiguous` engine evidence.
 
-Formation claims and `continuation_reflex_fired` receipts remain separate from engine receipts. A matching retry replays durable evidence; a retry during the same claimed native turn may return in-progress, while payload conflicts, unrelated running work, stale generations, expired or old-boot claims, and ambiguous outcomes fail closed.
+Formation claims and `continuation_reflex_fired` receipts remain separate from engine receipts. Once a formation receipt exists, a matching retry replays only the canonical immutable request/receipt binding before consulting mutable intent, context, or turn-obligation state; it therefore remains replayable after the obligation closes. A retry during the same claimed native turn may return in-progress, while payload conflicts, unrelated running work, stale generations, expired or old-boot claims, and ambiguous outcomes fail closed.
 
 The periodic extension is inspection-only. It does not claim requests or dispatch continuation turns.
 

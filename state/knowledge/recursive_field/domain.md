@@ -9,9 +9,9 @@
 
 ## Core Principle: The Field Knows Itself
 
-When `KNOWLEDGE_DIR=state/knowledge/recursive_field`, the formation's assembled system prompt contains a complete, SHA-256-hashed self-model of its own 23 scripts/modules, unit cell mechanics, governance system, continuation and lifecycle contracts, and multi-node orchestration protocols. This creates a **conceptual recursion** — the agent processes a description of its own architecture to refine its internal self-model and guide its runtime behaviors.
+When `KNOWLEDGE_DIR=state/knowledge/recursive_field`, the formation's assembled system prompt contains a complete, SHA-256-hashed self-model of its own 24 scripts/modules, unit cell mechanics, governance system, continuation and lifecycle contracts, and multi-node orchestration protocols. This creates a **conceptual recursion** — the agent processes a description of its own architecture to refine its internal self-model and guide its runtime behaviors.
 
-## The 23 Function-Literal Scripts and Modules
+## The 24 Function-Literal Scripts and Modules
 
 | Script | Function |
 | --- | --- |
@@ -34,6 +34,7 @@ When `KNOWLEDGE_DIR=state/knowledge/recursive_field`, the formation's assembled 
 | `consume_queue.py` | Bounded asynchronous recipient execution — validates envelopes, claims one allowlisted task, authors results, advances a durable cursor, and persists state |
 | `continuation_schema.py` | Formation-owned continuation constructors and strict schema/hash/transition/lease/effect-boundary validation with atomic and immutable writes |
 | `lifecycle_contracts.py` | Pure three-record lifecycle contracts; turn obligations use closed unbound-ingress/bound lineage, immutable CAS binding, and bound-only protocol reflex, while authorization/result contracts remain non-actuating |
+| `turn_obligation_adapter.py` | Project-owned schema 1.1.0 semantic adapter; Agent Zero owns chat-local durability/CAS while Recursive Field owns lineage, evidence, genesis, and anti-recursion validation |
 | `resume_thread.py` | Read-only seven-way continuation classifier with sequence, boot identity, security, evidence, and reconciliation checks |
 | `checkpoint_intent.py` | Explicit arming and immutable checkpoint recording with per-intent locking and compare-and-swap head advancement |
 | `continuation_reflex.py` | Formation-owned immutable system-protocol request, claim, and `continuation_reflex_fired` contracts; authenticated plugin dispatch delegates to the engine-owned typed continuation primitive |
@@ -73,7 +74,7 @@ Setting `LIBRARY=recursive-field` in `.env` cascades across:
 ## Self-Referential Recursion
 
 This document is the formation knowing itself. When `build_prompt_pipeline.py` loads this into Layer 4, the assembled system prompt contains:
-- A description of the 23 scripts/modules that assemble, coordinate, and preserve it
+- A description of the 24 scripts/modules that assemble, coordinate, and preserve it
 - A description of the 5-layer pipeline that laminated it
 - A description of the security profile that filtered it
 - A description of the `{LIBRARY}` resolver that parameterized it

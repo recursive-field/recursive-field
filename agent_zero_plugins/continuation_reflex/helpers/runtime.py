@@ -70,7 +70,7 @@ class DispatchPlan:
     root: Path
     request: dict[str, Any]
     context: Any
-    engine_request: dict[str, Any]
+    engine_request: dict[str, Any] | None
     claim: dict[str, Any] | None
     claim_disposition: str
     existing_fired: dict[str, Any] | None = None
@@ -306,9 +306,17 @@ def _validate_fired(
         or set(fired) != required
     ):
         raise ReflexConflictError("existing fired receipt payload is invalid")
+    expected_receipt_id = str(
+        uuid.uuid5(
+            uuid.UUID(str(request["request_id"])),
+            "continuation-reflex-fired",
+        )
+    )
+    expected_turn_id = f"{request['request_id']}:{_engine_generation(request)}"
     if (
-        not _canonical_uuid(fired.get("receipt_id"))
+        fired.get("receipt_id") != expected_receipt_id
         or fired.get("claim_id") != claim.get("claim_id")
+        or fired.get("turn_id") != expected_turn_id
         or fired.get("injection_role") != "system"
         or fired.get("maximum_new_turns") != 1
         or fired.get("user_message_sent") is not False
@@ -534,13 +542,25 @@ def _engine_generation(request: Mapping[str, Any]) -> int:
     return sequence
 
 
-def _engine_request(request: Mapping[str, Any]) -> dict[str, Any]:
+def _engine_request(request: Mapping[str, Any], context: Any) -> dict[str, Any]:
+    try:
+        obligation = context.continuation_turn_obligation_binding(
+            {
+                "intent_id": request["intent_id"],
+                "checkpoint": request["checkpoint"],
+            }
+        )
+    except Exception as exc:
+        # The framework method owns generic persistence. Formation maps any
+        # missing, stale, or ambiguous binding to a closed dispatch conflict.
+        raise ReflexConflictError(f"turn_obligation_not_resumable: {exc}") from exc
     return {
-        "schema_version": "1.0.0",
+        "schema_version": "1.1.0",
         "request_id": request["request_id"],
         "context_id": request["context_id"],
         "generation": _engine_generation(request),
         "formation_reflex_sha256": request["reflex_sha256"],
+        "turn_obligation": obligation,
         "system_protocol": dict(request["system_protocol"]),
     }
 
@@ -624,6 +644,25 @@ def prepare_dispatch(
     request = validate_request(_read_json(root, request_path))
     if request["request_id"] != request_id or request_path.stem != request_id:
         raise ReflexValidationError("request filename binding mismatch")
+    # A validated immutable formation receipt is the terminal replay authority.
+    # Return before consulting mutable intent/checkpoint or context/obligation
+    # state: the bound obligation has already completed and may now be closed.
+    receipt_path = root / RECEIPT_RELATIVE / f"{request_id}.json"
+    if receipt_path.exists():
+        existing_fired = _validate_fired(
+            request,
+            _read_json(root, receipt_path),
+        )
+        return DispatchPlan(
+            root=root,
+            request=request,
+            context=None,
+            engine_request=None,
+            claim=None,
+            claim_disposition="not_required_already_fired",
+            existing_fired=existing_fired,
+        )
+
     _validate_intent_binding(
         root,
         request,
@@ -637,24 +676,6 @@ def prepare_dispatch(
     context = context_lookup(request["context_id"])
     if context is None:
         raise ReflexNotFoundError("existing_context_not_found")
-
-    # Durable terminal evidence is replayable regardless of later context
-    # activity; no new engine work occurs on this path.
-    receipt_path = root / RECEIPT_RELATIVE / f"{request_id}.json"
-    if receipt_path.exists():
-        existing_fired = _validate_fired(
-            request,
-            _read_json(root, receipt_path),
-        )
-        return DispatchPlan(
-            root=root,
-            request=request,
-            context=context,
-            engine_request=_engine_request(request),
-            claim=None,
-            claim_disposition="not_required_already_fired",
-            existing_fired=existing_fired,
-        )
 
     boot_id = _read_boot_id()
     if boot_id is None:
@@ -693,7 +714,7 @@ def prepare_dispatch(
         root=root,
         request=request,
         context=context,
-        engine_request=_engine_request(request),
+        engine_request=_engine_request(request, context),
         claim=claim,
         claim_disposition=claim_disposition,
         existing_fired=None,
@@ -710,6 +731,8 @@ def record_fired(
     ):
         raise ReflexConflictError("engine_turn_not_completed")
     expected = plan.engine_request
+    if expected is None:
+        raise ReflexConflictError("engine_request_missing")
     if (
         engine_result.get("request_id") != expected["request_id"]
         or engine_result.get("context_id") != expected["context_id"]

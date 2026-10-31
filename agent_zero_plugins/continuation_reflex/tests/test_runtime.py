@@ -27,6 +27,7 @@ from continuation_reflex import (
     record_reflex_fired,
 )
 from continuation_schema import build_lease, canonical_json_bytes
+from turn_obligation_adapter import RecursiveFieldTurnObligationAdapter
 
 _RUNTIME_SPEC = importlib.util.spec_from_file_location(
     "continuation_reflex_runtime_under_test",
@@ -43,11 +44,57 @@ AT = __import__("datetime").datetime.fromisoformat("2026-01-01T00:10:00+00:00")
 
 
 class FakeContext:
+    obligation_binding = {
+        "obligation_id": "22222222-2222-4222-8222-222222222222",
+        "generation": 4,
+        "phase_generation": 1,
+        "record_sha256": "d" * 64,
+    }
+
     def __init__(self, running: bool = False):
         self.running = running
+        self.binding_requests = []
 
     def is_running(self) -> bool:
         return self.running
+
+    def continuation_turn_obligation_binding(self, formation_binding):
+        self.binding_requests.append(formation_binding)
+        return dict(self.obligation_binding)
+
+
+class LifecycleContext:
+    """Context double backed by actual schema-1.1 obligation transitions."""
+
+    def __init__(self, adapter, waiting):
+        self.adapter = adapter
+        self.record = waiting
+        self.binding_requests = []
+
+    def is_running(self) -> bool:
+        return False
+
+    def continuation_turn_obligation_binding(self, formation_binding):
+        self.binding_requests.append(formation_binding)
+        selected = self.adapter.select_protocol_reflex(
+            (self.record,), formation_binding=formation_binding
+        )
+        return {
+            "obligation_id": selected["obligation_id"],
+            "generation": selected["generation"],
+            "phase_generation": selected["phase_generation"],
+            "record_sha256": selected["turn_obligation_sha256"],
+        }
+
+    def complete_terminal_turn(self) -> None:
+        active = self.adapter.advance_protocol_reflex(
+            self.record, recorded_at="2026-01-01T00:11:00Z"
+        )
+        self.record = self.adapter.close_terminal(
+            active,
+            message_ref="assistant-history-id",
+            persisted_at="2026-01-01T00:12:00Z",
+        )
 
 
 class ContinuationReflexPluginTest(unittest.TestCase):
@@ -62,6 +109,7 @@ class ContinuationReflexPluginTest(unittest.TestCase):
         )
         self.intent_id = str(uuid.uuid4())
         self.context_id = "opaque-existing-context"
+        self.obligation_binding = dict(FakeContext.obligation_binding)
         self.intent = arm_intent(
             start=self.root,
             intent_id=self.intent_id,
@@ -336,15 +384,52 @@ class ContinuationReflexPluginTest(unittest.TestCase):
             "context_id",
             "generation",
             "formation_reflex_sha256",
+            "turn_obligation",
             "system_protocol",
         })
+        self.assertEqual(plan.engine_request["schema_version"], "1.1.0")
+        self.assertEqual(plan.engine_request["turn_obligation"], self.obligation_binding)
         self.assertEqual(plan.engine_request["request_id"], request["request_id"])
         self.assertEqual(plan.engine_request["formation_reflex_sha256"], request["reflex_sha256"])
         self.assertEqual(plan.engine_request["system_protocol"]["role"], "system")
         self.assertIs(plan.engine_request["system_protocol"]["user_message_sent"], False)
 
     def test_record_fired_is_separate_and_idempotent(self) -> None:
+        record_checkpoint(
+            start=self.root,
+            intent_id=self.intent_id,
+            expected_intent_sha256=self.intent["intent_sha256"],
+            checkpoint_id="44444444-4444-4444-8444-444444444444",
+            recorded_at="2026-01-01T00:01:00+00:00",
+            state="armed",
+            lease=build_lease(),
+        )
         request, _ = self._request()
+        adapter = RecursiveFieldTurnObligationAdapter(PROJECT_ROOT)
+        initial = adapter.build_ordinary_ingress(
+            {
+                "obligation_id": "22222222-2222-4222-8222-222222222222",
+                "context_id": self.context_id,
+                "ingress_id": "33333333-3333-4333-8333-333333333333",
+                "ingress_sha256": "a" * 64,
+                "projection_sha256": "b" * 64,
+                "ingressed_at": "2026-01-01T00:00:00Z",
+                "ingress_identity": "agent-zero:communicate:user-message",
+                "recorded_at": "2026-01-01T00:00:00Z",
+            }
+        )
+        waiting = adapter.apply_handoff(
+            initial,
+            evidence={
+                "evidence_type": "checkpoint_planted",
+                "intent_id": request["intent_id"],
+                "checkpoint_id": request["checkpoint"]["checkpoint_id"],
+                "checkpoint_sha256": request["checkpoint"]["checkpoint_sha256"],
+                "planted_at": "2026-01-01T00:09:00Z",
+            },
+            recorded_at="2026-01-01T00:09:00Z",
+        )
+        context = LifecycleContext(adapter, waiting)
         config = {
             "enabled": True,
             "field_root": str(self.root),
@@ -360,7 +445,7 @@ class ContinuationReflexPluginTest(unittest.TestCase):
             plan = runtime.prepare_dispatch(
                 config,
                 request["request_id"],
-                context_lookup=lambda _value: FakeContext(False),
+                context_lookup=lambda _value: context,
             )
             engine_result = {
                 "request_id": request["request_id"],
@@ -379,13 +464,25 @@ class ContinuationReflexPluginTest(unittest.TestCase):
                     "protocol_text_sha256": request["system_protocol"]["text_sha256"],
                 },
             }
+            context.complete_terminal_turn()
             fired, disposition = runtime.record_fired(plan, engine_result)
             replay, replay_disposition = runtime.record_fired(plan, engine_result)
-            prepared = runtime.prepare_dispatch(
-                config,
-                request["request_id"],
-                context_lookup=lambda _value: FakeContext(False),
-            )
+
+            def unexpected_context_lookup(_value):
+                raise AssertionError("terminal replay consulted mutable context state")
+
+            with patch.object(
+                runtime,
+                "_validate_intent_binding",
+                side_effect=AssertionError(
+                    "terminal replay consulted mutable intent/checkpoint state"
+                ),
+            ):
+                prepared = runtime.prepare_dispatch(
+                    config,
+                    request["request_id"],
+                    context_lookup=unexpected_context_lookup,
+                )
 
         self.assertEqual(disposition, "created")
         self.assertEqual(replay_disposition, "exists_identical")
@@ -394,7 +491,11 @@ class ContinuationReflexPluginTest(unittest.TestCase):
         self.assertEqual(fired["fired"]["injection_role"], "system")
         self.assertIs(fired["fired"]["user_message_sent"], False)
         self.assertEqual(prepared.existing_fired, fired)
+        self.assertIsNone(prepared.context)
         self.assertIsNone(prepared.claim)
+        self.assertIsNone(prepared.engine_request)
+        self.assertEqual(context.record["state"], "closed")
+        self.assertEqual(len(context.binding_requests), 1)
 
     def test_record_fired_requires_exact_terminal_engine_evidence(self) -> None:
         request, _ = self._request()

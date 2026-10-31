@@ -79,11 +79,17 @@ def plan_for(
         request={"request_id": REQUEST_ID, "context_id": CONTEXT_ID},
         context=context or FakeContext(),
         engine_request={
-            "schema_version": "1.0.0",
+            "schema_version": "1.1.0",
             "request_id": REQUEST_ID,
             "context_id": CONTEXT_ID,
             "generation": 1,
             "formation_reflex_sha256": "a" * 64,
+            "turn_obligation": {
+                "obligation_id": "22222222-2222-4222-8222-222222222222",
+                "generation": 4,
+                "phase_generation": 1,
+                "record_sha256": "d" * 64,
+            },
             "system_protocol": {
                 "role": "system",
                 "maximum_new_turns": 1,
