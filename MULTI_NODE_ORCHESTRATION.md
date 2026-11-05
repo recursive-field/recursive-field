@@ -52,7 +52,11 @@ Remote Git Repository (recursive-field/recursive-field)
 
 ### 2.1 Per-Droplet Resolver Configuration
 
-Each droplet maintains its own `.env` resolver switchboard with a unique `LIBRARY` name and non-colliding `PORT_BASE`:
+Each droplet maintains an operator-owned `.env` resolver input with a unique
+`LIBRARY` and non-colliding `PORT_BASE`; the generator never rewrites it.
+`LIBRARY`, `FIELD_ROOT`, and `PORT_BASE` precedence is explicit CLI/function
+value, nonempty process environment, nonempty root `.env`, then the documented
+defaults. Any supplied `FIELD_ROOT` must canonically equal marker discovery:
 
 ```env
 # Droplet A — tbc-castle
@@ -85,15 +89,24 @@ IMAGE_NAME=agent0ai/agent-zero:latest
 
 Each droplet's `PORT_BASE` is offset by 1000 to prevent host-level collisions:
 
-| Droplet | `LIBRARY` | `PORT_BASE` | Agent 1 SSH | Agent 2 SSH | Nginx HTTP |
+| Droplet | `LIBRARY` | `PORT_BASE` | Agent 1 SSH | Agent 2 SSH | First HTTP gateway |
 | --- | --- | --- | --- | --- | --- |
-| A (castle) | `tbc-castle` | 44000 | 44022 | 44122 | 44080 |
-| B (fortress) | `tbc-fortress` | 45000 | 45022 | 45122 | 45080 |
-| C (cabin) | `tbc-cabin` | 46000 | 46022 | 46122 | 46080 |
+| A (castle, 2 agents) | `tbc-castle` | 44000 | 44022 | 44122 | 44280 |
+| B (fortress, 2 agents) | `tbc-fortress` | 45000 | 45022 | 45122 | 45280 |
+| C (cabin, 1 agent) | `tbc-cabin` | 46000 | 46022 | — | 46180 |
+
+Agent slot `i` is `PORT_BASE + i*100`; only `slot+22` is published to
+container SSH `22`. Active HTTP/API gateway slot `j` is
+`PORT_BASE + (agent_count+j)*100`; `slot+80` is published to Nginx `80`.
+Agent HTTP/API is internal-only on container `80`. There are no event ports,
+host agent API ports, HTTPS formula, or `+800` spare in Phase 3.
 
 ### 2.3 Container Name Uniqueness
 
-The `{LIBRARY}` resolver ensures container names are globally unique across the network:
+The `{LIBRARY}` resolver makes container names unique within each generated
+Compose model/node when node-local library values do not collide. It does not
+establish network-global uniqueness; that requires an external federation
+registry or coordination contract.
 
 | Droplet | Agent Service | Container Name |
 | --- | --- | --- |
@@ -147,11 +160,11 @@ git clone git@github.com:recursive-field/recursive-field.git
 # 4. Attach the durable volume
 mount /dev/volume-a /mnt/volume-a
 
-# 5. Symlink or mount durable directories
-ln -s /mnt/volume-a/state/agents/ ./agents/
-ln -s /mnt/volume-a/state/mesh/ ./mesh/
-ln -s /mnt/volume-a/state/gateways/ ./gateways/
-ln -s /mnt/volume-a/state/ ./state/
+# 5. Bind-mount durable directories at canonical coordinates
+mount --bind /mnt/volume-a/state/agents/ ./agents/
+mount --bind /mnt/volume-a/state/mesh/ ./mesh/
+mount --bind /mnt/volume-a/state/gateways/ ./gateways/
+mount --bind /mnt/volume-a/state/ ./state/
 
 # 6. Restore resolver switchboard
 cp .env.template .env
@@ -168,6 +181,9 @@ python3 verify_unit_cell.py
 python3 entrypoint.py field-sentinel
 # Expected: container_activated event with new hostname
 ```
+
+Level 2 rejects symlinks for inspected identities, manifests, queues, and
+generated-output paths. External-volume symlink support is deferred.
 
 ---
 
@@ -192,14 +208,15 @@ Droplet A (tbc-castle)          Droplet B (tbc-fortress)
 
 ### 4.2 Nginx Cross-Host Gateway Federation
 
-Each droplet's `nginx.conf` can be extended to route across host boundaries:
+Generated Nginx uses Compose service DNS keys and internal port `80`. A manually
+managed cross-host network/DNS layer may extend routing across hosts:
 
 ```nginx
 # Cross-host mesh bridge
 upstream cross_host_agents {
-    server tbc-castle-field-sentinel:8000;  # Droplet A
-    server tbc-fortress-field-scout:8000;   # Droplet B
-    server tbc-cabin-field-sentinel:8000;   # Droplet C
+    server agent-field-sentinel:80;  # Compose service key on Droplet A network
+    server agent-field-scout:80;     # separately managed cross-host DNS/network
+    server agent-cabin-observer:80;  # separately managed cross-host DNS/network
 }
 
 server {
@@ -279,9 +296,10 @@ python3 create_gateway.py castle-api-gw mesh castle-mesh http
 # === Step 7: Hydrate profile from seed stone ===
 python3 hydrate_profile.py castle-sentinel sentinel_observer
 
-# === Step 8: Generate Docker Compose ===
-python3 generate_compose.py --port-base 44000
-# Output: docker-compose.yml with ${LIBRARY}-prefixed container names
+# === Step 8: Validate with zero mutation, then generate owned outputs ===
+python3 generate_compose.py --dry-run
+python3 generate_compose.py
+# Output: marked docker-compose.yml and active HTTP/API gateway nginx.conf files
 
 # === Step 9: Activate entrypoint ===
 python3 entrypoint.py castle-sentinel
@@ -291,6 +309,24 @@ python3 entrypoint.py castle-sentinel
 python3 verify_unit_cell.py
 # Expected: UNIT CELL INTEGRITY OK
 ```
+
+The Compose plan is rendered from the same immutable normalized topology as all
+Nginx configs. The validated canonical absolute field root is bound into host
+mount sources, with no late `${FIELD_ROOT}` interpolation. Agent coordinates are read-only; only `memory`, `observations`,
+and connected queues are read-write; field-wide orchestration is read-only; the
+Docker socket is never mounted. `--dry-run` completes validation and reports
+create/replace/delete hashes with zero mutation. Every output has the exact
+ownership marker. `docker-compose.yml` is generator-owned; an unmarked active
+Nginx config requires `--adopt-existing`, while stale deletion is limited to
+marked files. Compose output is fixed at canonical
+`${FIELD_ROOT}/docker-compose.yml`; `--out` may only name that path. Schema
+version `1.0.0` is the sole supported topology contract, and duplicate output
+paths fail before staging. Apply opens canonical `FIELD_ROOT`, traverses parent
+components with `O_DIRECTORY|O_NOFOLLOW`, and pins trusted parent dirfds.
+Staging, final identity/digest validation, atomic replacement, stale deletion,
+cleanup, and directory `fsync` use only dirfd-relative operations; replacement
+of the planned parent coordinate fails closed. Atomicity is per file, not
+cross-file.
 
 ### 5.2 Multi-Node Federation Bootstrap
 
@@ -346,12 +382,13 @@ cd recursive-field
 mount /dev/sdb /mnt/volume-recovery
 
 # === Phase 4: Restore durable state ===
-# Mount durable directories over the scaffold's empty ones
+# Bind durable directories over the scaffold's empty canonical coordinates
 rm -rf agents/ mesh/ gateways/ state/snapshots/ state/ledger.jsonl
-ln -s /mnt/volume-recovery/agents/ ./agents/
-ln -s /mnt/volume-recovery/mesh/ ./mesh/
-ln -s /mnt/volume-recovery/gateways/ ./gateways/
-ln -s /mnt/volume-recovery/state/ ./state/
+mkdir -p agents mesh gateways state
+mount --bind /mnt/volume-recovery/agents/ ./agents/
+mount --bind /mnt/volume-recovery/mesh/ ./mesh/
+mount --bind /mnt/volume-recovery/gateways/ ./gateways/
+mount --bind /mnt/volume-recovery/state/ ./state/
 
 # === Phase 5: Restore resolver switchboard ===
 cp .env.template .env

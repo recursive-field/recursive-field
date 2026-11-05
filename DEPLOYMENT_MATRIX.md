@@ -42,22 +42,25 @@
 
 ### PORT_BASE Strategy
 
-Each droplet receives a `PORT_BASE` offset by 1000 to guarantee no host-level port collisions:
+Each droplet receives a `PORT_BASE` offset by 1000. Within one generated formation, agents and active HTTP/API gateways are ordered lexically by canonical slug/ID before slots are assigned:
 
-| Droplet | `PORT_BASE` | Agent 1 SSH | Agent 2 SSH | Agent 3 SSH | Nginx HTTP | Nginx HTTPS | API Spare |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| A (Castle) | 44000 | 44022 | 44122 | 44222 | 44080 | 44443 | 44800 |
-| B (Fortress) | 45000 | 45022 | 45122 | 45222 | 45080 | 45443 | 45800 |
-| C (Cabin) | 46000 | 46022 | 46122 | 46222 | 46080 | 46443 | 46800 |
+| Droplet | `PORT_BASE` | Agent 1 SSH | Agent 2 SSH | Agent 3 SSH | First HTTP gateway |
+| --- | --- | --- | --- | --- | --- |
+| A (Castle, 3 agents) | 44000 | 44022 | 44122 | 44222 | 44380 |
+| B (Fortress, 2 agents) | 45000 | 45022 | 45122 | — | 45280 |
+| C (Cabin, 1 agent) | 46000 | 46022 | — | — | 46180 |
 
 ### Port Allocation Formula
 
 ```
-Agent SSH port  = PORT_BASE + (idx * 100) + 22
-Nginx HTTP port = PORT_BASE + 80
-Nginx HTTPS port = PORT_BASE + 443
-API spare port  = PORT_BASE + 800
+Agent slot(i)       = PORT_BASE + i * 100
+Agent SSH host port = Agent slot(i) + 22        # -> container 22
+Gateway slot(j)     = PORT_BASE + (agent_count + j) * 100
+Gateway HTTP port   = Gateway slot(j) + 80      # -> nginx container 80
 ```
+
+Agent HTTP/API remains internal-only on container port `80`. Phase 3 publishes no
+agent API host port, event port, HTTPS formula, or `+800` API spare.
 
 ### Per-Droplet Agent Port Map
 
@@ -71,8 +74,7 @@ API spare port  = PORT_BASE + 800
 
 | Service | Port | Container |
 | --- | --- | --- |
-| Nginx HTTP | 44080 | `tbc-castle-mesh-api-gw` |
-| Nginx HTTPS | 44443 | `tbc-castle-mesh-api-gw` |
+| First Nginx HTTP | 44380 | `tbc-castle-mesh-api-gw` |
 
 #### Droplet B (Fortress, PORT_BASE=45000)
 
@@ -83,7 +85,7 @@ API spare port  = PORT_BASE + 800
 
 | Service | Port | Container |
 | --- | --- | --- |
-| Nginx HTTP | 45080 | `tbc-fortress-mesh-api-gw` |
+| First Nginx HTTP | 45280 | `tbc-fortress-mesh-api-gw` |
 
 #### Droplet C (Cabin, PORT_BASE=46000)
 
@@ -93,7 +95,7 @@ API spare port  = PORT_BASE + 800
 
 | Service | Port | Container |
 | --- | --- | --- |
-| Nginx HTTP | 46080 | `tbc-cabin-mesh-api-gw` |
+| First Nginx HTTP | 46180 | `tbc-cabin-mesh-api-gw` |
 
 ---
 
@@ -151,13 +153,17 @@ UUID=c3d4e5f6-a7b8-9012-cdef-123456789012  /mnt/vol-cabin  ext4  defaults,nofail
 ### Durable State Directory Mapping
 
 ```bash
-# On each droplet, symlink durable directories to the scaffold:
-ln -sf /mnt/vol-castle/agents ./agents
-ln -sf /mnt/vol-castle/mesh ./mesh
-ln -sf /mnt/vol-castle/gateways ./gateways
-ln -sf /mnt/vol-castle/state ./state
+# Level 2 requires real canonical directories, not symlinks. Bind-mount or mount
+# the durable filesystem at those coordinates before generation:
+mount --bind /mnt/vol-castle/agents ./agents
+mount --bind /mnt/vol-castle/mesh ./mesh
+mount --bind /mnt/vol-castle/gateways ./gateways
+mount --bind /mnt/vol-castle/state ./state
 # tmp/ remains ephemeral (not symlinked)
 ```
+
+External-volume symlink allowance is deferred. Inspected identities, manifests,
+queues, and generated-output paths containing symlinks fail closed in Level 2.
 
 ### Durable vs Ephemeral Boundaries
 
@@ -179,6 +185,12 @@ ln -sf /mnt/vol-castle/state ./state
 ---
 
 ## 5. Per-Droplet `.env` Templates
+
+The files below are operator-owned inputs. `generate_compose.py` never rewrites
+them. For `LIBRARY`, `FIELD_ROOT`, and `PORT_BASE`, precedence is explicit
+CLI/function value, nonempty process environment, nonempty root `.env`, then the
+documented defaults. Any supplied `FIELD_ROOT` must canonically equal marker
+discovery.
 
 ### Droplet A — Castle (Primary)
 
@@ -271,24 +283,24 @@ Droplet A (Castle)              Droplet B (Fortress)           Droplet C (Cabin)
 | Gateway Slug | Type | Target | Droplet | Port | Nginx Upstream |
 | --- | --- | --- | --- | --- | --- |
 | `castle-gw` | CLI | agent: castle-sentinel | A | 44022 | — |
-| `castle-api-gw` | HTTP | mesh: castle-mesh | A | 44080 | castle-sentinel:8000, castle-scout:8000 |
+| `castle-api-gw` | HTTP | mesh: castle-mesh | A | 44380 | `agent-castle-sentinel:80`, `agent-castle-scout:80` |
 | `fortress-gw` | CLI | agent: fortress-sentinel | B | 45022 | — |
-| `fortress-api-gw` | HTTP | mesh: fortress-mesh | B | 45080 | fortress-sentinel:8000, fortress-scout:8000 |
+| `fortress-api-gw` | HTTP | mesh: fortress-mesh | B | 45280 | `agent-fortress-sentinel:80`, `agent-fortress-scout:80` |
 | `cabin-gw` | CLI | agent: cabin-observer | C | 46022 | — |
-| `cabin-api-gw` | HTTP | mesh: castle-cabin-mesh | C | 46080 | cabin-observer:8000 |
+| `cabin-api-gw` | HTTP | mesh: castle-cabin-mesh | C | 46180 | `agent-cabin-observer:80` |
 
 ### Nginx Federation Upstream
 
 ```nginx
 # Castle — Cross-Host Federation Ingress
 upstream cross_host_federation {
-    server tbc-castle-castle-sentinel:8000;    # Local (Droplet A)
-    server tbc-fortress-fortress-scout:8000;   # Remote (Droplet B)
-    server tbc-cabin-cabin-observer:8000;      # Remote (Droplet C)
+    server agent-castle-sentinel:80;    # Compose service DNS on its network
+    server agent-fortress-scout:80;     # Requires separately managed cross-host DNS/network
+    server agent-cabin-observer:80;     # Requires separately managed cross-host DNS/network
 }
 
 server {
-    listen 44080;
+    listen 80;
     server_name castle.recursive-field.local;
 
     location /federation/ {
@@ -365,12 +377,13 @@ mkdir -p /mnt/rootfs/a0/usr/projects
 git clone git@github.com:recursive-field/recursive-field.git /mnt/rootfs/a0/usr/projects/recursive-field
 cd /mnt/rootfs/a0/usr/projects/recursive-field
 
-# --- Symlink durable directories ---
+# --- Bind durable directories at the canonical coordinates ---
 rm -rf agents mesh gateways state
-ln -sf /mnt/vol-castle/agents ./agents
-ln -sf /mnt/vol-castle/mesh ./mesh
-ln -sf /mnt/vol-castle/gateways ./gateways
-ln -sf /mnt/vol-castle/state ./state
+mkdir -p agents mesh gateways state
+mount --bind /mnt/vol-castle/agents ./agents
+mount --bind /mnt/vol-castle/mesh ./mesh
+mount --bind /mnt/vol-castle/gateways ./gateways
+mount --bind /mnt/vol-castle/state ./state
 
 # --- Configure resolver switchboard ---
 cp .env.template .env
@@ -401,8 +414,27 @@ python3 create_gateway.py castle-api-gw mesh castle-mesh http
 # --- Hydrate profile ---
 python3 hydrate_profile.py castle-sentinel sentinel_observer
 
-# --- Generate compose harness ---
-python3 generate_compose.py --port-base 44000
+# --- Validate with zero mutation, then generate owned outputs ---
+python3 generate_compose.py --dry-run
+python3 generate_compose.py
+
+# The dry run performs complete validation and reports deterministic
+# create/replace/delete output hashes without filesystem mutation. Generated
+# Compose binds the validated canonical absolute FIELD_ROOT into host mount
+# sources (never late ${FIELD_ROOT} interpolation), mounts each agent coordinate read-only, overlays only memory,
+# observations, and connected queues read-write, mounts field orchestration
+# read-only, and never mounts the Docker socket. Every output carries the exact
+# generated marker. An unmarked active-gateway nginx.conf requires explicit
+# --adopt-existing; only marked stale Nginx files are deleted. Apply stages and
+# fsyncs all bytes before same-directory atomic replacement and directory fsync.
+# Apply opens canonical FIELD_ROOT and traverses each output parent component
+# with O_DIRECTORY|O_NOFOLLOW, pins trusted parent dirfds, and performs staging,
+# final identity/digest validation, replace/delete, cleanup, and fsync relative
+# to those descriptors. Parent-coordinate replacement fails closed. Atomicity
+# is per file, not one cross-file transaction.
+# Compose output is fixed at FIELD_ROOT/docker-compose.yml; --out can only name
+# that exact path. Duplicate planned paths and topology schema versions other
+# than 1.0.0 fail before staging.
 
 # --- Activate entrypoint ---
 python3 entrypoint.py castle-sentinel
@@ -436,7 +468,7 @@ python3 inspect_formation.py
 # 1. Provision fresh droplet (same region/size)
 # 2. Attach the same durable volume
 # 3. Clone scaffold from Git
-# 4. Symlink durable directories to volume
+# 4. Bind-mount durable directories at canonical coordinates (no symlinks)
 # 5. Restore .env from template (same LIBRARY, same PORT_BASE)
 # 6. Run: python3 init_environment.py
 # 7. Run: python3 verify_unit_cell.py
@@ -462,7 +494,7 @@ python3 inspect_formation.py
 | Cross-host meshes | `castle-fortress-mesh`, `castle-cabin-mesh` | `castle-fortress-mesh` | `castle-cabin-mesh` |
 | Gateways | 2 (CLI + HTTP) | 1 (HTTP) | 1 (CLI) |
 | Volume | `vol-castle-01` (100GB) | `vol-fortress-01` (100GB) | `vol-cabin-01` (50GB) |
-| Nginx port | 44080 | 45080 | 46080 |
+| First Nginx port (if present) | 44380 | 45280 | 46180 |
 | Knowledge | `recursive_field` (self) | `recursive_field` (self) | `recursive_field` (self) |
 
 **3 droplets · 6 agents · 4 meshes · 4 gateways · 3 volumes · 1 scaffold · zero drift.** 🌱

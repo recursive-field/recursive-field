@@ -109,7 +109,7 @@ When the library is instantiated or cloned, slotting a definition into the macro
   ├── {FIELD_ROOT} (derived from discovered root path)
   ├── {PORT_BASE} (derived from resolver)
   ├── Container names: ${LIBRARY}_sentinel, ${LIBRARY}_ingress
-  ├── Volume mounts: ${FIELD_ROOT}/agents/..., ${LIBRARY}_data
+  ├── Volume mounts: validated canonical absolute FIELD_ROOT/agents/... host sources
   └── Prompt namespaces: governance profiles, include paths
 ```
 
@@ -197,16 +197,38 @@ Expands declarative seeds into active runtime profiles:
 
 ### 4.3 Dynamic Compose Harness (`generate_compose.py`)
 
-Emits location-agnostic `docker-compose.yml` with `${FIELD_ROOT}` interpolation:
+The generator resolves inputs, normalizes and validates one immutable topology,
+renders Compose and Nginx from that model, plans ownership-safe changes, and only
+then applies them. `LIBRARY`, `FIELD_ROOT`, and `PORT_BASE` precedence is explicit
+CLI/function argument, nonempty process environment, nonempty root `.env`, then
+`recursive-field`, marker-discovered root, and `44000`. `.env` is operator-owned
+input only and is never rewritten. Every supplied root must canonically equal
+marker discovery.
 
 | Feature | Mechanism |
 | --- | --- |
-| Path interpolation | `${FIELD_ROOT}/agents/<slug>:...` — zero hardcoded absolutes |
-| Per-agent ports | `PORT_BASE + idx * 100` — no port collisions across agents |
-| Nginx ingress | Auto-generated for HTTP/API gateways with upstream agent configs |
-| `.env` provisioning | `FIELD_ROOT`, `PORT_BASE`, `IMAGE_NAME` — single-point definition |
+| Determinism | Canonical UUID/slug/path validation and lexical slug/ID ordering; JSON and directory enumeration order do not affect bytes |
+| Agent ports | Slot `PORT_BASE + idx*100`; host `slot+22` to SSH `22`; HTTP/API is internal-only container `80` |
+| Gateway ports | Active HTTP/API slot `PORT_BASE + (agent_count+gw_idx)*100`; host `slot+80` to Nginx `80` |
+| Nginx routing | Compose service-key DNS and internal port `80`; exact upstream/target/`depends_on` correspondence |
+| Mount policy | Canonical absolute validated host root bound into Compose; agent coordinate read-only; `memory`, `observations`, and connected queues read-write; full field read-only at `/agent_orchestration`; no Docker socket |
+| Filesystem policy | Compose output fixed at `${FIELD_ROOT}/docker-compose.yml`; inspected identities/manifests/queues/outputs must not be symlinks in Level 2; duplicate planned paths fail before staging |
+| Ownership | Exact generated marker on every output; explicit `--adopt-existing` required for an unmarked active-gateway Nginx config |
+| Dry run | `--dry-run` returns/reports deterministic create/replace/delete plans and bytes with zero mutation |
+| Topology schema | Marker and manifests support `1.0.0` only; unsupported versions fail closed |
 
-**Invocation**: `python3 generate_compose.py [--out <path>] [--port-base <int>]`  
+There are no host API ports, event ports, `+800` spare ports, or active `8000`
+upstreams. Inactive and non-HTTP gateways emit no service. Marked stale Nginx
+files are pruned; unmarked stale files are preserved. All artifacts render and
+validate before writing. Planning captures existing output and parent-directory
+identity plus the file content digest. Apply opens canonical `FIELD_ROOT`,
+traverses output parents component-by-component with `O_DIRECTORY|O_NOFOLLOW`,
+and pins trusted parent dirfds. Staging, final-state revalidation, atomic replace,
+stale deletion, cleanup, and directory `fsync` are dirfd-relative; replacement
+of the planned parent coordinate fails closed. Atomicity is per file, not one
+cross-file transaction.
+
+**Invocation**: `python3 generate_compose.py [--out docker-compose.yml] [--library <name>] [--field-root <path>] [--port-base <int>] [--image <image>] [--dry-run] [--adopt-existing]`. `--out` is compatibility-only and must resolve exactly to canonical `${FIELD_ROOT}/docker-compose.yml`; it cannot redirect generation to an operator-owned path.
 
 ---
 
@@ -558,7 +580,7 @@ Zero-drift portability validated across:
 | `/a0/usr/projects/recursive-field` → `/tmp/recursive-field-relocated` | ✅ Zero drift — all paths re-resolved |
 | `/a0/usr/projects/recursive-field` → `/tmp/mnt_rootfs_test/recursive-field` | ✅ Zero drift — host mount simulation |
 
-Both relocations confirmed: `.env` and `field_env.json` update seamlessly, UUID linkages intact, SHA-256 checksums match, `verify_unit_cell.py` exits 0.
+Both relocations confirmed after the operator updates `.env` and initialization regenerates `field_env.json`: UUID linkages remain intact, SHA-256 checksums match, and `verify_unit_cell.py` exits 0. Compose generation itself never edits `.env`.
 
 ---
 
@@ -566,9 +588,9 @@ Both relocations confirmed: `.env` and `field_env.json` update seamlessly, UUID 
 
 ### 8.1 Single-Point Definition
 
-The entire repository is variableized around a single placeholder slot: **`{LIBRARY}`** (or `${LIBRARY}`).
+The repository is variableized around **`{LIBRARY}`** (or `${LIBRARY}`). For Compose generation, the root `.env` is one resolver input rather than generator-owned state.
 
-When a user clones the starter pack, they set their chosen instance name in **one location** — the Resolver Switchboard (`.env` / `field_env.json`):
+Resolution uses explicit argument → nonempty environment → nonempty root `.env` → documented default. `FIELD_ROOT` is additionally identity-bearing: all supplied environment and `.env` roots must canonically match the marker-discovered root even when another source has higher precedence.
 
 ```env
 LIBRARY=tbc
@@ -583,9 +605,10 @@ Modifying the `{LIBRARY}` entry cascades dynamically across the entire stack:
 
 | Cascade Target | Variable Interpolation |
 | --- | --- |
-| Container & service names | `${LIBRARY}_sentinel`, `${LIBRARY}_ingress` |
-| Volume & VFS mounts | `${FIELD_ROOT}`, `${LIBRARY}_data` |
-| Port allocations | `${PORT_BASE}` dynamic offset mapping |
+| Container and network names | `${LIBRARY}-sentinel`, `${LIBRARY}-bridge` |
+| Compose service DNS | `agent-<slug>` and `nginx-<slug>` keys, independent of container names |
+| Volume & VFS mounts | Canonical absolute validated `FIELD_ROOT` host sources (no late Compose interpolation); `/agent_orchestration` container root |
+| Port allocations | Agent SSH `slot+22`; active HTTP/API gateway `slot+80` |
 | Prompt & profile namespaces | Governance posture, include paths |
 
 No Python logic changes required — the cascade is purely configuration-level.
@@ -595,7 +618,7 @@ No Python logic changes required — the cascade is purely configuration-level.
 Adjusting any slider in the Resolver Switchboard triggers automatic self-adjustment:
 - Security profile shift → prompt pipeline re-laminates, observation logs record the change
 - `{LIBRARY}` rename → container names, volume paths, and compose specs re-interpolate
-- Port base shift → per-agent host port offsets recalculate
+- Port base shift → validated agent/gateway host offsets recalculate; malformed, colliding, or overflowing values fail closed
 - `rebalance.py` maintains graph equilibrium across all adjustments
 
 ---
@@ -841,7 +864,7 @@ state/
 | `inspect_formation.py` | `python3 inspect_formation.py [--agent <slug>] [--json]` | 0 OK · 1 no root · 2 error | `find_root` |
 | `persist_state.py` | `python3 persist_state.py [--agent <slug>] [--flush]` | 0 OK · 1 no root · 2 no env | `find_root` |
 | `hydrate_profile.py` | `python3 hydrate_profile.py <slug> <seed> [--force]` | 0 OK · 1 no root · 2 bad · 3 exists | `find_root` |
-| `generate_compose.py` | `python3 generate_compose.py [--out <path>] [--port-base <int>]` | 0 OK · 1 no root · 2 no env | `find_root` |
+| `generate_compose.py` | `python3 generate_compose.py [--out docker-compose.yml] [--library <name>] [--field-root <path>] [--port-base <int>] [--image <image>] [--dry-run] [--adopt-existing]` | 0 OK · 2 resolution/topology/path/ownership failure | `find_root` |
 | `system_control.py` | `python3 system_control.py [--agent <s>] [--set-security <p>] [--toggle-include <n>] [--status]` | 0 OK · 1 no root · 2 bad | `find_root` |
 | `build_prompt_pipeline.py` | `python3 build_prompt_pipeline.py <slug> [--out-file <path>] [--json]` | 0 OK · 1 no root · 2 no agent | `find_root` |
 | `spawn_subordinate.py` | `python3 spawn_subordinate.py <parent> <child> [role] [--seed <name>]` | 0 spawned · 1 no root · 2 bad · 3 exists · 4 security | `find_root`, `create_agent`, `create_mesh`, `hydrate_profile` |
