@@ -32,6 +32,9 @@ from find_root import find_root  # noqa: E402
 
 MARKER_FILENAME = ".recursive-field-root"
 ENV_FILENAME = "field_env.json"
+TERMINAL_CONTINUATION_STATUSES = frozenset(
+    {"completed", "cancelled", "blocked", "failed"}
+)
 
 
 def _read_json(path: Path) -> dict:
@@ -76,6 +79,51 @@ def _verify_env(root: Path) -> dict | None:
         if not Path(env[key]).is_dir():
             return None
     return env
+
+
+def calculate_snr(field_root: str | Path) -> dict:
+    """Measure closed continuation obligations against open and scratch work."""
+    root = Path(field_root)
+    intents_dir = root / "state" / "continuations" / "intents"
+    closed_obligations = 0
+    open_obligations = 0
+    if intents_dir.is_dir():
+        for path in sorted(intents_dir.glob("*.json")):
+            try:
+                record = _read_json(path)
+            except (OSError, json.JSONDecodeError):
+                # An unreadable continuation cannot safely count as closed.
+                open_obligations += 1
+                continue
+            status = record.get("status")
+            if status in TERMINAL_CONTINUATION_STATUSES:
+                closed_obligations += 1
+            else:
+                # Unknown or missing statuses remain unresolved, not signal.
+                open_obligations += 1
+
+    scratch_dir = root / "scratch"
+    scratch_orphans = 0
+    if scratch_dir.is_dir():
+        scratch_orphans = sum(
+            1 for path in sorted(scratch_dir.rglob("*")) if path.is_file()
+        )
+
+    total = closed_obligations + open_obligations + scratch_orphans
+    snr_score = 100.0 if total == 0 else round(closed_obligations / total * 100, 1)
+    if snr_score >= 90:
+        status = "NOMINAL"
+    elif snr_score >= 70:
+        status = "DEGRADED"
+    else:
+        status = "CRITICAL"
+    return {
+        "snr_score": snr_score,
+        "status": status,
+        "closed_obligations": closed_obligations,
+        "open_obligations": open_obligations,
+        "scratch_orphans": scratch_orphans,
+    }
 
 
 def _scan_agents(agents_dir: Path) -> dict[str, dict]:
@@ -203,6 +251,7 @@ def _build_topology(root: Path) -> dict:
         "genesis_uuid": genesis.get("genesis_uuid", ""),
         "schema_version": genesis.get("schema_version", ""),
         "env_verified": env is not None,
+        "snr": calculate_snr(root),
         "agents": agents,
         "meshes": meshes,
         "gateways": gateways,

@@ -10,6 +10,7 @@ import random
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 import uuid
 from dataclasses import replace
@@ -333,6 +334,14 @@ class TopologyAndRenderingTests(FieldCase):
 
 
 class PlanningAndApplyTests(FieldCase):
+    def test_generation_completes_within_speed_budget(self) -> None:
+        started = time.perf_counter()
+        result = self.generate(dry_run=True)
+        elapsed = time.perf_counter() - started
+
+        self.assertIn("plan", result)
+        self.assertLess(elapsed, 1.5, f"compose generation took {elapsed:.3f}s")
+
     def test_dry_run_returns_plan_and_bytes_without_mutation(self) -> None:
         before = snapshot_files(self.root)
         result = self.generate(dry_run=True)
